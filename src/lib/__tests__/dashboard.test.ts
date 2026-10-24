@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { casesForDashboard, dashboardKind, isApproaching, isPastNextAction } from '../dashboard';
+import { casesForDashboard, dashboardKind, filterReportCases, isApproaching, isPastNextAction, summarizeReportCases } from '../dashboard';
 import type { CaseRow } from '../supabase';
 
 const cases = [
@@ -31,5 +31,20 @@ describe('role dashboard scope',()=>{
     expect(isApproaching(row,new Date('2026-01-01T00:00:00.000Z'),3)).toBe(true);
     expect(isPastNextAction(row,new Date('2026-01-04T00:00:00.000Z'))).toBe(true);
     expect(isPastNextAction({...row,next_action_at:null,expected_disposal_at:'2026-01-02'},new Date('2026-01-04T00:00:00.000Z'))).toBe(true);
+  });
+  it('filters report cases by inclusive receipt dates and Bureau/Cell',()=>{
+    const scoped=filterReportCases(cases,{bureauId:'p',fromDate:'2026-01-01',toDate:'2026-01-01'});
+    expect(scoped.map(row=>row.id)).toEqual(['1','2']);
+    expect(filterReportCases(cases,{bureauId:'missing'})).toEqual([]);
+    expect(filterReportCases(cases,{})).toHaveLength(3);
+  });
+  it('summarizes report metrics from filtered case records without assuming SLAs',()=>{
+    const rows=[
+      {...cases[0],status:'Pending',next_action_at:'2026-01-02'},
+      {...cases[1],status:'Under Process',next_action_at:null,expected_disposal_at:'2026-01-04'},
+      {...cases[2],status:'Disposed',next_action_at:'2025-12-01'},
+    ];
+    expect(summarizeReportCases(rows,new Date('2026-01-05T00:00:00.000Z'))).toEqual({total:3,pending:1,underProcess:1,disposed:1,overdue:2,disposalRate:33});
+    expect(summarizeReportCases([]).disposalRate).toBeNull();
   });
 });

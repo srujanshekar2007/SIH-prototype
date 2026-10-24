@@ -16,6 +16,13 @@ export function casesForDashboard(rows:CaseRow[],kind:DashboardKind,userId:strin
 }
 export const isPastNextAction=(c:CaseRow,now=new Date())=>Boolean(c.status!=='Disposed'&&[c.next_action_at,c.expected_disposal_at].some(d=>d&&new Date(d)<now));
 export const isApproaching=(c:CaseRow,now=new Date(),windowDays?:number)=>windowDays!==undefined&&Boolean([c.next_action_at,c.expected_disposal_at].some(d=>d&&new Date(d)>=now&&new Date(d)<=new Date(now.getTime()+windowDays*86400000))&&c.status!=='Disposed');
+export function filterReportCases(rows:CaseRow[],filters:{bureauId?:string;fromDate?:string;toDate?:string}){
+  return rows.filter(c=>(!filters.bureauId||filters.bureauId==='all'||c.bureau_id===filters.bureauId)&&(!filters.fromDate||c.received_at.slice(0,10)>=filters.fromDate)&&(!filters.toDate||c.received_at.slice(0,10)<=filters.toDate));
+}
+export function summarizeReportCases(rows:CaseRow[],now=new Date()){
+  const disposed=rows.filter(c=>c.status==='Disposed').length;
+  return {total:rows.length,pending:rows.filter(c=>c.status==='Pending').length,underProcess:rows.filter(c=>c.status==='Under Process').length,disposed,overdue:rows.filter(c=>isPastNextAction(c,now)).length,disposalRate:rows.length?Math.round(disposed*100/rows.length):null};
+}
 export function makeChartData(rows:CaseRow[],actions:any[]=[],now=new Date()){
   const statuses:Record<string,number>={},bureau:Record<string,number>={},intake:Record<string,number>={},disposed:Record<string,number>={},ageing:Record<string,number>={'0–7 days':0,'8–30 days':0,'31–90 days':0,'90+ days':0};
   const monthKey=(s:string)=>{const d=new Date(s);return Number.isNaN(d.valueOf())?'':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`};
