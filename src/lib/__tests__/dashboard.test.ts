@@ -15,6 +15,8 @@ describe('role dashboard scope',()=>{
     expect(dashboardKind({active:true,is_admin:false,role:'pgrc_officer',can_manage_bureau:null,created_at:'2025-01-01T00:00:00.000Z'})).toBe('bureau');
     expect(dashboardKind({active:true,is_admin:false,role:'pgrc_officer',can_manage_bureau:false,created_at:'2025-01-01T00:00:00.000Z'})).toBe('officer');
     expect(dashboardKind({active:true,is_admin:false,role:'rb_officer',can_manage_bureau:false})).toBe('officer');
+    expect(dashboardKind({active:true,is_admin:false,role:'bureau_officer',bureau_id:'regional-office',can_manage_bureau:false})).toBe('officer');
+    expect(dashboardKind({active:true,is_admin:false,role:'bureau_officer',bureau_id:'regional-office',can_manage_bureau:true})).toBe('bureau');
     expect(dashboardKind({active:true,is_admin:false,role:'aicte_official'})).toBe('oversight');
     expect(dashboardKind({active:false,is_admin:true,role:'administrator'})).toBe('denied');
   });
@@ -28,5 +30,6 @@ describe('role dashboard scope',()=>{
     expect(isApproaching(row,new Date('2026-01-01T00:00:00.000Z'))).toBe(false);
     expect(isApproaching(row,new Date('2026-01-01T00:00:00.000Z'),3)).toBe(true);
     expect(isPastNextAction(row,new Date('2026-01-04T00:00:00.000Z'))).toBe(true);
+    expect(isPastNextAction({...row,next_action_at:null,expected_disposal_at:'2026-01-02'},new Date('2026-01-04T00:00:00.000Z'))).toBe(true);
   });
 });

@@ -30,7 +30,7 @@ function isLocalOrigin(origin: string) {
 }
 
 function hasAuthorizedRole(profile: any) {
-  return profile?.is_admin === true || ['aicte_official', 'pgrc_officer', 'rb_officer'].includes(profile?.role);
+  return profile?.is_admin === true || ['aicte_official', 'pgrc_officer', 'rb_officer', 'bureau_officer'].includes(profile?.role);
 }
 
 export function createLocalAiApp(deps: Dependencies) {
