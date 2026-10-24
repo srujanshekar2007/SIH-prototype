@@ -3,7 +3,7 @@ const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 export const isSupabaseConfigured = Boolean(url && key && !url.includes('your-project'));
 export const supabase: SupabaseClient | null = isSupabaseConfigured ? createClient(url!, key!, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }) : null;
-export type CaseRow = { id:string; case_number:string; institution_id:string; category:string|null; subject:string|null; status:string; bureau_id:string|null; assigned_officer_id:string|null; received_at:string; created_at:string; next_action_at:string|null; expected_disposal_at?:string|null; next_action_required?:string|null; priority:string|null; institutions?:{name:string; region:string|null; internal_id:string; aicte_permanent_id?:string|null; address?:string|null}|null; bureaus?:{name:string}|null };
+export type CaseRow = { id:string; case_number:string; institution_id:string; category:string|null; subject:string|null; description:string|null; status:string; bureau_id:string|null; assigned_officer_id:string|null; received_at:string; created_at:string; next_action_at:string|null; expected_disposal_at?:string|null; next_action_required?:string|null; priority:string|null; institutions?:{name:string; region:string|null; internal_id:string; aicte_permanent_id?:string|null; address?:string|null}|null; bureaus?:{name:string}|null };
 export const friendlyError = (e: unknown) => {
   if (e instanceof Error) return e.message;
   if (e && typeof e === 'object' && 'message' in e && typeof e.message === 'string' && e.message.trim()) return e.message;
@@ -18,7 +18,7 @@ export async function fetchAllPages<T>(queryPage:(from:number,to:number)=>Promis
 
 export async function fetchComplaintCases(client: SupabaseClient) {
   const select = (withExpectedDate: boolean) => fetchAllPages<any>((from, to) => client.from('complaints')
-    .select(`id,case_number,institution_id,category,subject,status,bureau_id,assigned_officer_id,received_at,created_at,next_action_at,${withExpectedDate ? 'expected_disposal_at,next_action_required,' : ''}priority,institutions(name,region,internal_id,aicte_permanent_id,address),bureaus(name),assigned_officer:profiles!complaints_assigned_officer_id_fkey(display_name)`)
+    .select(`id,case_number,institution_id,category,subject,description,status,bureau_id,assigned_officer_id,received_at,created_at,next_action_at,${withExpectedDate ? 'expected_disposal_at,next_action_required,' : ''}priority,institutions(name,region,internal_id,aicte_permanent_id,address),bureaus(name),assigned_officer:profiles!complaints_assigned_officer_id_fkey(display_name)`)
     .order('received_at', { ascending: false }).range(from, to));
   const current = await select(true);
   const message = [current.error?.message, current.error?.details, current.error?.hint].filter(Boolean).join(' ').toLowerCase();
