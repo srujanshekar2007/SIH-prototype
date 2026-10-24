@@ -14,23 +14,29 @@ The supplied workspace contained no source files, package configuration, existin
 - Role-specific dashboards: designated administrators (`is_admin`), Bureau/Cell managers (`can_manage_bureau`), assigned individual officers, and read-only AICTE oversight. Counts/charts use RLS-visible records; individual officer case visibility is assignment-scoped.
 - Bureau-scoped officer workload, auditable assignment/reassignment events, authorized transfers, coordination requests/responses, overlap review, role-limited actions, and administrator-only audit summaries.
 - Responsive navy-sidebar administrative interface, status charts, empty/error/loading states, touch-sized mobile navigation, keyboard focus, and reduced-motion support.
-- Website Help Assistant is local deterministic FAQ matching. It has no Supabase import, network, API endpoint, case context, or persistence. Confidential requests get the required refusal; unrelated requests receive the required fallback.
+- Website Help Assistant remains local deterministic FAQ matching and does not access case data.
+- Complaint details include an optional local Ollama case summary. The local API verifies the Supabase access token and active profile, retrieves the case using the caller's RLS-scoped client, sends only that authorized record and its recent actions to Ollama on loopback, and does not persist the generated summary.
 
 ## Local setup
 
-Prerequisites: Node.js 20.19+ or 22.12+ and npm.
+Prerequisites: Node.js 20.19+ or 22.12+, npm, and Ollama running locally with the configured model (default `qwen2.5:3b`).
 
 ```sh
 npm install
 cp .env.example .env.local
-# Set the two values below in .env.local
+# Set Supabase values below; Ollama defaults work for a local installation.
 npm run dev
 ```
+
+`npm run dev` starts the Vite app and the loopback-only local AI API. The app does not expose the Ollama port to the browser; it calls the local API through Vite's `/api` proxy. Keep Ollama bound to the local machine.
 
 Required environment variables:
 
 - `VITE_SUPABASE_URL` — Supabase project URL.
 - `VITE_SUPABASE_ANON_KEY` — publishable/anon key. Never put a service-role key in a `VITE_` variable.
+- `OLLAMA_URL` — local Ollama HTTP endpoint; only localhost/loopback URLs are accepted.
+- `OLLAMA_MODEL` — local model tag; defaults to `qwen2.5:3b`.
+- `LOCAL_AI_PORT` — loopback API port; defaults to `3001`.
 
 The app intentionally shows a configuration notice and does not show fabricated records when these values are absent.
 
@@ -61,7 +67,8 @@ npm run preview    # preview production bundle
 - The current migration models one handling bureau and assigned officer per complaint. Additional bureau/cell names are configurable data, but historical multi-assignment memberships and granular case sharing need a reviewed extension.
 - Overlap suggestions can be generated on request from accessible cross-Bureau cases sharing an institution record. This is identity evidence only, not a claim that the complaints are duplicates; human review is required.
 - Coordination request creation and responses are wired for authorized participants. There is no configurable approaching-deadline window, expected-disposal date, or historical backlog snapshot; those metrics are not fabricated. `next_action_at` is presented as a past next-action date. The app has no persistent notification center, document Storage setup, date-range filters, or full audit browser.
-- AI case summarization is not included. No external AI service is called.
+- Local case summaries are generated on demand and are not written to Supabase. Prompt content is treated as untrusted data; summaries are decision support and may omit or misstate information, so officials must verify the source record. No external AI provider is called.
+- Local Ollama is available only when this local backend and the Ollama service are running on the same machine. Static deployments do not include this local backend.
 - No connected Supabase project or role-specific accounts were available, so the migrations have not been applied and live authentication, RLS, and workflow writes could not be verified here. The role and scope helpers have unit coverage.
 
 ## Deployment

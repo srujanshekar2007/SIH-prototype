@@ -4,24 +4,29 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "tsc -b && vite build",
+    "dev": "tsx scripts/dev.ts",
+    "dev:api": "tsx server/index.ts",
+    "dev:web": "vite --host 127.0.0.1",
+    "build": "npm run typecheck && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
     "test": "vitest run"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
+    "express": "^5.3.0",
     "lucide-react": "^0.468.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "recharts": "^2.15.4"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.1.1",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vite": "^7.2.2",
     "vitest": "^5.0.5"
