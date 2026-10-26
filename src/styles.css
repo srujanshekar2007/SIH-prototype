@@ -266,3 +266,26 @@ th{font-size:10px}td{font-size:12px}.status-badge{font-size:10px;padding:5px 9px
 :root[data-theme="dark"] .notification-panel{box-shadow:0 18px 48px rgb(0 0 0 / 48%)}:root[data-theme="dark"] .notification-count{border-color:#17283B;background:#DC2626}
 :root[data-theme="dark"] .notification-indicator.overdue{background:rgb(248 113 113 / 15%);color:#FCA5A5}:root[data-theme="dark"] .notification-indicator.due-soon{background:rgb(251 191 36 / 15%);color:#FCD34D}:root[data-theme="dark"] .notification-filters button.is-selected span{background:rgb(45 212 191 / 15%);color:#7FE4D3}
 @media(max-width:760px){.notification-panel{right:-6px;width:min(390px,calc(100vw - 24px));max-height:calc(100dvh - 84px)}.notification-filters{gap:3px;padding-inline:9px}.notification-filters button{flex:1;justify-content:center;padding:7px 5px}}
+
+/* Responsive refinements: preserve each page's existing data and component order. */
+.app-shell,.main{min-height:100vh;min-height:100dvh}
+.sidebar{inset:12px auto 12px 12px;border-radius:18px}
+.role-kpis.has-thirteen-cards{grid-template-columns:repeat(15,minmax(0,1fr))}
+.role-kpis.has-thirteen-cards>.kpi-card{grid-column:span 3}
+.role-kpis.has-thirteen-cards>.kpi-card:nth-last-child(-n+3){grid-column:span 5}
+.dashboard-grid,.chart-grid{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+.dashboard-grid>.panel:last-child:nth-child(odd),.chart-grid>.panel:last-child:nth-child(odd){grid-column:1/-1}
+.institution-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));align-items:stretch;gap:12px}
+.institution-card{min-width:0;min-height:116px;padding:18px;align-items:center}
+.institution-card>div:nth-child(2){flex:1;min-width:0}
+.institution-card h3,.institution-card small{overflow-wrap:anywhere;line-height:1.5}
+.report-chart{min-width:0}
+.chat-panel header .icon-btn{flex:none;border:1px solid rgb(255 255 255 / 24%);background:#20354B;color:#F7FAFC}
+.chat-panel header .icon-btn:hover,.chat-panel header .icon-btn:active{background:#31516C;color:#FFFFFF}
+.chat-panel header .icon-btn:focus-visible{outline:3px solid #2DD4BF;outline-offset:2px}
+.chat-panel header .icon-btn:disabled{background:#20354B;color:#A6B6CA;opacity:.7}
+.modal-backdrop{padding: max(15px,env(safe-area-inset-top,0px)) max(15px,env(safe-area-inset-right,0px)) max(15px,env(safe-area-inset-bottom,0px)) max(15px,env(safe-area-inset-left,0px));background:rgb(15 27 43 / 48%);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px)}
+.modal{max-height:calc(100dvh - 30px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));overscroll-behavior:contain}
+:root[data-theme="dark"] .modal-backdrop{background:rgb(3 7 18 / 76%)}
+@media(max-width:1200px){.role-kpis.has-thirteen-cards{grid-template-columns:repeat(3,minmax(0,1fr))}.role-kpis.has-thirteen-cards>.kpi-card,.role-kpis.has-thirteen-cards>.kpi-card:nth-last-child(-n+3){grid-column:auto}.dashboard-grid,.chart-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.role-kpis.has-thirteen-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-grid,.chart-grid{grid-template-columns:minmax(0,1fr)}.dashboard-grid>.panel:last-child:nth-child(odd),.chart-grid>.panel:last-child:nth-child(odd){grid-column:auto}.institution-grid{grid-template-columns:minmax(0,1fr)}.sidebar{border-radius:18px}.modal-backdrop{padding:max(10px,env(safe-area-inset-top,0px)) max(10px,env(safe-area-inset-right,0px)) max(10px,env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px))}.modal{max-height:calc(100dvh - 20px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}}
