@@ -296,3 +296,10 @@ th{font-size:10px}td{font-size:12px}.status-badge{font-size:10px;padding:5px 9px
 :root[data-theme="dark"] .modal-backdrop{background:rgb(3 7 18 / 76%)}
 @media(max-width:1200px){.role-kpis.has-thirteen-cards{grid-template-columns:repeat(3,minmax(0,1fr))}.role-kpis.has-thirteen-cards>.kpi-card,.role-kpis.has-thirteen-cards>.kpi-card:nth-last-child(-n+3){grid-column:auto}.dashboard-grid,.chart-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.role-kpis.has-thirteen-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-grid,.chart-grid{grid-template-columns:minmax(0,1fr)}.dashboard-grid>.panel:last-child:nth-child(odd),.chart-grid>.panel:last-child:nth-child(odd){grid-column:auto}.institution-grid{grid-template-columns:minmax(0,1fr)}.sidebar{border-radius:18px}.modal-backdrop{padding:max(10px,env(safe-area-inset-top,0px)) max(10px,env(safe-area-inset-right,0px)) max(10px,env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px))}.modal{max-height:calc(100dvh - 20px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}}
+
+/* Keep large relationship queues responsive by rendering a small page at a time. */
+.queue-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-top:1px solid var(--border);color:var(--muted-foreground);font-size:12px}
+.queue-pagination>div{display:flex;align-items:center;gap:10px}
+.queue-pagination .button{min-height:34px;padding:6px 11px}
+.queue-pagination .button:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:560px){.queue-pagination{align-items:flex-start;flex-direction:column}.queue-pagination>div{width:100%;justify-content:space-between}}
