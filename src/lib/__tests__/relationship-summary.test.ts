@@ -4,7 +4,7 @@ import { fetchDashboardRelationshipSummary } from '../supabase';
 describe('dashboard relationship summary', () => {
   it('calls the scoped summary RPC and normalizes its response shape', async () => {
     const rpc = vi.fn().mockResolvedValue({
-      data: { pending_count: '8', case_ids: ['case-1'], by_bureau: [{ name: 'RB', value: 8 }], recent: [{ id: 'rel-1' }] },
+      data: { pending_count: 8, case_ids: ['case-1'], by_bureau: [{ name: 'RB', value: 8 }], recent: [{ id: 'rel-1' }] },
       error: null,
     });
     const result = await fetchDashboardRelationshipSummary({ rpc } as any);
@@ -19,6 +19,24 @@ describe('dashboard relationship summary', () => {
   it('does not replace RPC failures with fabricated empty summary data', async () => {
     const error = { message: 'permission denied' };
     const result = await fetchDashboardRelationshipSummary({ rpc: vi.fn().mockResolvedValue({ data: null, error }) } as any);
+    expect(result).toEqual({ data: null, error });
+  });
+
+  it('accepts a genuine empty result but rejects missing or malformed counts', async () => {
+    const empty = await fetchDashboardRelationshipSummary({ rpc: vi.fn().mockResolvedValue({ data: { pending_count: 0, case_ids: [], by_bureau: [], recent: [] }, error: null }) } as any);
+    expect(empty.data?.pending_count).toBe(0);
+    expect(empty.error).toBeNull();
+
+    for (const data of [null, {}, { pending_count: '0', case_ids: [], by_bureau: [], recent: [] }, { pending_count: -1, case_ids: [], by_bureau: [], recent: [] }, { pending_count: 0 }]) {
+      const result = await fetchDashboardRelationshipSummary({ rpc: vi.fn().mockResolvedValue({ data, error: null }) } as any);
+      expect(result.data).toBeNull();
+      expect(result.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it('turns thrown network errors into an explicit failed result', async () => {
+    const error = new Error('network unavailable');
+    const result = await fetchDashboardRelationshipSummary({ rpc: vi.fn().mockRejectedValue(error) } as any);
     expect(result).toEqual({ data: null, error });
   });
 });

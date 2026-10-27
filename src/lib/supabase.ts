@@ -53,18 +53,27 @@ export type DashboardRelationshipSummary = {
 };
 
 export async function fetchDashboardRelationshipSummary(client: SupabaseClient) {
-  const { data, error } = await client.rpc('dashboard_relationship_summary');
-  if (error) return { data: null as DashboardRelationshipSummary | null, error };
-  const value = (data || {}) as Partial<DashboardRelationshipSummary>;
-  return {
-    data: {
-      pending_count: Number(value.pending_count) || 0,
-      case_ids: Array.isArray(value.case_ids) ? value.case_ids : [],
-      by_bureau: Array.isArray(value.by_bureau) ? value.by_bureau : [],
-      recent: Array.isArray(value.recent) ? value.recent : [],
-    },
-    error: null as any,
-  };
+  try {
+    const { data, error } = await client.rpc('dashboard_relationship_summary');
+    if (error) return { data: null as DashboardRelationshipSummary | null, error };
+    const value = data as Partial<DashboardRelationshipSummary> | null;
+    if (!value || !Number.isSafeInteger(value.pending_count) || Number(value.pending_count) < 0
+      || !Array.isArray(value.case_ids) || !value.case_ids.every((id) => typeof id === 'string')
+      || !Array.isArray(value.by_bureau) || !Array.isArray(value.recent)) {
+      return { data: null as DashboardRelationshipSummary | null, error: new Error('The relationship summary returned an incomplete or invalid response.') };
+    }
+    return {
+      data: {
+        pending_count: value.pending_count as number,
+        case_ids: value.case_ids,
+        by_bureau: value.by_bureau,
+        recent: value.recent,
+      },
+      error: null as any,
+    };
+  } catch (error) {
+    return { data: null as DashboardRelationshipSummary | null, error };
+  }
 }
 
 export async function fetchCaseActions(client: SupabaseClient) {

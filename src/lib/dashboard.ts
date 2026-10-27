@@ -34,9 +34,12 @@ export function makeChartData(rows:CaseRow[],actions:any[]=[],now=new Date()){
 }
 
 export function buildDashboardCards(kind:DashboardKind,rows:CaseRow[],overlaps:any,coordination:any[],transfers:any,actions:any[],profile:any,now=new Date()):[string,number|string,string,string][]{
-  const relationshipSummaryAvailable=overlaps!==null&&overlaps!==undefined;
-  const relationshipCount=relationshipSummaryAvailable?(Array.isArray(overlaps)?overlaps.length:(Number(overlaps?.pending_count)||0)):'Unavailable';
-  const relationshipDescription=relationshipSummaryAvailable?'Awaiting human review':'Relationship summary unavailable; retry data';
+  const summaryLoading=overlaps==='loading';
+  const summaryRefreshing=overlaps==='refreshing';
+  const relationshipSummaryAvailable=Number.isSafeInteger(overlaps?.pending_count)&&overlaps.pending_count>=0
+    &&Array.isArray(overlaps?.case_ids)&&Array.isArray(overlaps?.by_bureau)&&Array.isArray(overlaps?.recent);
+  const relationshipCount=summaryLoading?'Loading…':summaryRefreshing?'Refreshing…':relationshipSummaryAvailable?overlaps.pending_count:'Unavailable';
+  const relationshipDescription=summaryLoading?'Loading the authorized relationship summary':summaryRefreshing?'Refreshing the authorized relationship summary':relationshipSummaryAvailable?'Awaiting human review':'Relationship summary unavailable; retry data';
   const relationshipCaseIds=Array.isArray(overlaps)
     ?overlaps.flatMap((r:any)=>[r.source_case_id,r.target_case_id])
     :(overlaps?.case_ids||[]);
@@ -50,7 +53,7 @@ export function buildDashboardCards(kind:DashboardKind,rows:CaseRow[],overlaps:a
   const recentAssignmentIds=new Set(actions.filter(a=>a.action_type==='assignment'&&new Date(a.created_at)>=new Date(now.getTime()-7*86400000)).map(a=>a.complaint_id));
   const newlyAssigned=rows.filter(c=>c.assigned_officer_id===profile?.id&&recentAssignmentIds.has(c.id)).length;
   const attentionIds=new Set<string>([...rows.filter(c=>isPastNextAction(c,now)||!c.assigned_officer_id).map(c=>c.id),...coordination.filter(r=>r.status==='open').map(r=>r.complaint_id),...relationshipCaseIds].filter(Boolean));
-  const attentionCount=relationshipSummaryAvailable?attentionIds.size:'Unavailable';
+  const attentionCount=summaryLoading?'Loading…':summaryRefreshing?'Refreshing…':relationshipSummaryAvailable?attentionIds.size:'Unavailable';
   const disposedByOfficer=actions.filter(a=>a.actor_id===profile?.id&&a.status_after==='Disposed').length;
   const common:any={
     administrator:[['Total complaints',rows.length,'All records authorized for your role','all'],['Unassigned',unassigned,'Awaiting case assignment','Unassigned'],['Pending',count('Pending'),'Awaiting action','Pending'],['Under process',count('Under Process'),'Currently being handled','Under Process'],['Coordination awaiting response',openCoord,'Open inter-unit requests','awaiting'],['Disposed',count('Disposed'),'Recorded as disposed','Disposed'],['Transferred',count('Transferred'),'Current status: transferred','Transferred'],['Escalated',count('Escalated'),'Current status: escalated','Escalated'],['Past recorded deadline',overdue,'Next-action or expected-disposal date has passed','Overdue'],['Potential relationships',relationshipCount,relationshipDescription,'overlap'],['Approaching deadlines','Not configured','No approaching-deadline window is configured','deadline_config'],['Institutions represented',new Set(rows.map(c=>c.institution_id)).size,'In authorized complaint records','institutions'],['Cases requiring attention',attentionCount,relationshipSummaryAvailable?'Overdue, unassigned, overlap, or open coordination':'Overlap summary unavailable; retry data','attention']],

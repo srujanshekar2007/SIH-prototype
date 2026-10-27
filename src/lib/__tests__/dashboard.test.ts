@@ -53,6 +53,16 @@ describe('role dashboard scope',()=>{
     expect(cards.find(([label])=>label==='Potential relationships')?.[1]).toBe('Unavailable');
     expect(cards.find(([label])=>label==='Cases requiring attention')?.[1]).toBe('Unavailable');
   });
+  it('keeps relationship loading, malformed, and successful-empty states distinct',()=>{
+    const loading=buildDashboardCards('administrator',cases,'loading',[],[],[],{id:'admin',is_admin:true});
+    const refreshing=buildDashboardCards('administrator',cases,'refreshing',[],[],[],{id:'admin',is_admin:true});
+    const malformed=buildDashboardCards('administrator',cases,{},[],[],[],{id:'admin',is_admin:true});
+    const empty=buildDashboardCards('administrator',cases,{pending_count:0,case_ids:[],by_bureau:[],recent:[]},[],[],[],{id:'admin',is_admin:true});
+    expect(loading.find(([label])=>label==='Potential relationships')?.[1]).toBe('Loading…');
+    expect(refreshing.find(([label])=>label==='Potential relationships')?.[1]).toBe('Refreshing…');
+    expect(malformed.find(([label])=>label==='Potential relationships')?.[1]).toBe('Unavailable');
+    expect(empty.find(([label])=>label==='Potential relationships')?.[1]).toBe(0);
+  });
   it('uses the database relationship summary for dashboard counts and affected cases',()=>{
     const summary={pending_count:2,case_ids:['1','3'],by_bureau:[],recent:[]};
     const cards=buildDashboardCards('administrator',cases,summary,[],[],[],{id:'admin',is_admin:true});
