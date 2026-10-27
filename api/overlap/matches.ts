@@ -11,6 +11,7 @@ import {
   MATCHING_VERSION,
   MAX_AUTHORIZED_CASES,
   MAX_CANDIDATE_PAIRS,
+  resolveSimilarityThreshold,
   relationshipKey,
   requestEmbeddingBatch,
   textHash,
@@ -20,6 +21,7 @@ import {
 type RequestLike = {
   method?: string;
   headers: Record<string, string | string[] | undefined>;
+  body?: unknown;
 };
 type ResponseLike = {
   setHeader(name: string, value: string): void;
@@ -71,10 +73,18 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
     });
     const model = process.env.OPENAI_EMBEDDING_MODEL || EMBEDDING_MODEL;
 
-    const threshold = Number(process.env.AI_SIMILARITY_THRESHOLD ?? '0.78');
-    if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+    if (req.body !== undefined && req.body !== null && (typeof req.body !== 'object' || Array.isArray(req.body))) {
+      return reply(res, 400, { code: 'invalid_request', message: 'Send the matching options as a JSON object.' });
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
+    const thresholdResult = resolveSimilarityThreshold(process.env.AI_SIMILARITY_THRESHOLD, body.threshold);
+    if ('error' in thresholdResult && thresholdResult.error === 'invalid_request') {
+      return reply(res, 400, { code: 'invalid_threshold', message: 'threshold must be a finite number from 0 to 1, or null to use the configured default.' });
+    }
+    if ('error' in thresholdResult) {
       return reply(res, 503, { code: 'invalid_configuration', message: 'AI_SIMILARITY_THRESHOLD must be a number from 0 to 1.' });
     }
+    const threshold = thresholdResult.value;
 
     const rows: ComplaintForMatching[] = [];
     for (let from = 0; ; from += 500) {
@@ -89,7 +99,7 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
 
     const actorRows = rows.filter((row) => canActorCompareCase(row, profile, auth.user.id));
     const { data: existingRows, error: existingError } = await callerClient.from('case_relationships')
-      .select('source_case_id,target_case_id,review_status,semantic_similarity,semantic_model,source_text_hash,target_text_hash');
+      .select('source_case_id,target_case_id,review_status,semantic_similarity,semantic_model,source_text_hash,target_text_hash,explanation');
     if (existingError) {
       return reply(res, 503, {
         code: 'migration_required',
@@ -99,7 +109,7 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
     const existing = new Map((existingRows || []).map((row: any) => [relationshipKey(row.source_case_id, row.target_case_id), row]));
     let pairs;
     try {
-      pairs = buildCandidatePairs(actorRows, existing, model, MAX_CANDIDATE_PAIRS);
+      pairs = buildCandidatePairs(actorRows, existing, model, MAX_CANDIDATE_PAIRS, threshold);
     } catch (error) {
       return reply(res, 413, { code: 'candidate_limit', message: error instanceof Error ? error.message : 'The candidate limit was exceeded.' });
     }

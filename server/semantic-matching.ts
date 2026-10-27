@@ -8,6 +8,20 @@ export const EMBEDDING_BATCH_SIZE = 64;
 export const MAX_UNCACHED_EMBEDDINGS_PER_RUN = 128;
 export const EMBEDDING_REQUEST_TIMEOUT_MS = 20_000;
 
+export function resolveSimilarityThreshold(configured: string | undefined, requested: unknown):
+  | { value: number; source: 'configured' | 'request' }
+  | { error: 'invalid_configuration' | 'invalid_request' } {
+  const configuredValue = Number(configured ?? '0.78');
+  if ((configured !== undefined && !configured.trim()) || !Number.isFinite(configuredValue) || configuredValue < 0 || configuredValue > 1) {
+    return { error: 'invalid_configuration' };
+  }
+  if (requested === undefined || requested === null) return { value: configuredValue, source: 'configured' };
+  if (typeof requested !== 'number' || !Number.isFinite(requested) || requested < 0 || requested > 1) {
+    return { error: 'invalid_request' };
+  }
+  return { value: requested, source: 'request' };
+}
+
 export type ComplaintForMatching = {
   id: string;
   case_number: string;
@@ -124,9 +138,10 @@ export function relationshipKey(a: string, b: string): string {
 
 export function buildCandidatePairs(
   rows: ComplaintForMatching[],
-  existing: Map<string, { review_status: string; semantic_similarity: number | null; semantic_model: string | null; source_text_hash: string | null; target_text_hash: string | null }>,
+  existing: Map<string, { review_status: string; semantic_similarity: number | null; semantic_model: string | null; source_text_hash: string | null; target_text_hash: string | null; explanation?: { threshold?: number } | null }>,
   model: string,
   limit = MAX_CANDIDATE_PAIRS,
+  threshold?: number,
 ): CandidatePair[] {
   const institutions = new Map<string, ComplaintForMatching[]>();
   for (const row of rows) {
@@ -149,7 +164,10 @@ export function buildCandidatePairs(
         if (row && row.review_status !== 'pending') continue;
         const sourceHash = textHash(complaintEmbeddingText(source)!);
         const targetHash = textHash(complaintEmbeddingText(target)!);
-        if (row?.semantic_similarity !== null && row?.semantic_similarity !== undefined && row.semantic_model === model && row.source_text_hash === sourceHash && row.target_text_hash === targetHash) continue;
+        const scoreIsCurrent = row?.semantic_similarity !== null && row?.semantic_similarity !== undefined
+          && row.semantic_model === model && row.source_text_hash === sourceHash && row.target_text_hash === targetHash;
+        const thresholdIsCurrent = threshold === undefined || row?.explanation?.threshold === threshold;
+        if (scoreIsCurrent && thresholdIsCurrent) continue;
         pairs.push({ source, target, key });
         if (pairs.length > limit) throw new Error('Too many cross-bureau candidates for one run. Narrow the authorized institution scope or use indexed retrieval for a larger dataset.');
       }

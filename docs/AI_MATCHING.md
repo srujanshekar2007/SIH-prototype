@@ -10,7 +10,8 @@ Only subject, category, and description are composed into provider input. Common
 
 - Hard candidate block: same canonical `institution_id` and distinct non-null `bureau_id`; both records must be visible to the caller and within the caller's action scope.
 - Signal: cosine similarity between the two text embeddings. Category and dates/status are context in the stored explanation; they are not score components. Institution equality and bureau difference are eligibility gates, not scored AI features.
-- Default threshold: `0.78`, configurable through `AI_SIMILARITY_THRESHOLD`. It is an uncalibrated operating default, not a validated cutoff.
+- Default threshold: `0.78`, configurable through server-side `AI_SIMILARITY_THRESHOLD`. The Overlap Monitoring selector offers `0.50`, `0.65`, `0.78`, `0.85`, and `0.90`; the selected number is sent with each Generate AI Matches request and controls persistence for that run. `Any / rule-based` removes the queue's score filter; for an AI run with that selection, the server's configured default is used. The selector also filters the visible queue: rule-based rows without a score appear only under `Any / rule-based`.
+- These values are uncalibrated operating thresholds, not validated cutoffs. Changing the selected value and rerunning reuses unchanged cached embeddings but reevaluates pending-pair metadata at the requested threshold. Confirmed/rejected decisions are not recomputed.
 - Stored score: raw cosine similarity in `[-1,1]`, not a probability, confidence, or proof of duplication. Suggestions never merge or modify complaints and require an authorized human decision.
 - Existing pending relationships may be updated with current score/evidence; confirmed/rejected relationships are skipped. Pair uniqueness and text/model hashes support idempotency.
 

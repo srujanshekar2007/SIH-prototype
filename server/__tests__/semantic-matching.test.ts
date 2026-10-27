@@ -9,6 +9,7 @@ import {
   parseEmbeddingBatch,
   redactComplaintIdentifiers,
   relationshipKey,
+  resolveSimilarityThreshold,
   requestEmbeddingBatch,
   textHash,
   type ComplaintForMatching,
@@ -36,6 +37,30 @@ describe('semantic overlap matching boundaries', () => {
     expect(suggestion.similarity).toBeGreaterThan(0.78);
     expect(suggestion.shouldInsert).toBe(true);
     expect(suggestion.explanation.humanReviewRequired).toBe(true);
+  });
+
+  it.each([
+    ['0.50', 0.5, true],
+    ['0.65', 0.65, true],
+    ['0.78', 0.78, true],
+    ['0.85', 0.85, false],
+    ['0.90', 0.9, false],
+  ])('applies the selected %s minimum to a genuine cosine score', (_label, threshold, qualifies) => {
+    const a = complaint({ id: 'score-a' });
+    const b = complaint({ id: 'score-b', bureau_id: bureauB });
+    const pair = buildCandidatePairs([a, b], new Map(), 'text-embedding-3-small')[0];
+    const suggestion = makeSuggestion(pair, new Map([['score-a', [1, 0]], ['score-b', [0.8, 0.6]]]), threshold as number);
+    expect(suggestion.similarity).toBeCloseTo(0.8, 10);
+    expect(suggestion.shouldInsert).toBe(qualifies);
+  });
+
+  it('uses the configured default for Any/rule-based, accepts selected thresholds, and rejects invalid values', () => {
+    expect(resolveSimilarityThreshold(undefined, null)).toEqual({ value: 0.78, source: 'configured' });
+    expect(resolveSimilarityThreshold('0.65', null)).toEqual({ value: 0.65, source: 'configured' });
+    expect(resolveSimilarityThreshold('0.78', 0.9)).toEqual({ value: 0.9, source: 'request' });
+    expect(resolveSimilarityThreshold('bad', null)).toEqual({ error: 'invalid_configuration' });
+    expect(resolveSimilarityThreshold('0.78', '0.65')).toEqual({ error: 'invalid_request' });
+    expect(resolveSimilarityThreshold('0.78', 1.01)).toEqual({ error: 'invalid_request' });
   });
 
   it('never compares semantically similar text for different institution identifiers', () => {
@@ -84,6 +109,20 @@ describe('semantic overlap matching boundaries', () => {
     const hashB = textHash(complaintEmbeddingText(b)!);
     expect(buildCandidatePairs([a, b], new Map([[key, { review_status: 'confirmed', semantic_similarity: null, semantic_model: null, source_text_hash: null, target_text_hash: null }]]), 'text-embedding-3-small')).toEqual([]);
     expect(buildCandidatePairs([a, b], new Map([[key, { review_status: 'pending', semantic_similarity: 0.9, semantic_model: 'text-embedding-3-small', source_text_hash: hashA, target_text_hash: hashB }]]), 'text-embedding-3-small')).toEqual([]);
+  });
+
+  it('reuses a cached pending pair when its selected threshold changes so its review metadata can refresh', () => {
+    const a = complaint({ id: 'case-a' });
+    const b = complaint({ id: 'case-b', bureau_id: bureauB });
+    const key = relationshipKey(a.id, b.id);
+    const hashA = textHash(complaintEmbeddingText(a)!);
+    const hashB = textHash(complaintEmbeddingText(b)!);
+    const existing = new Map([[key, {
+      review_status: 'pending', semantic_similarity: 0.8, semantic_model: 'text-embedding-3-small',
+      source_text_hash: hashA, target_text_hash: hashB, explanation: { threshold: 0.78 },
+    }]]);
+    expect(buildCandidatePairs([a, b], existing, 'text-embedding-3-small', undefined, 0.78)).toEqual([]);
+    expect(buildCandidatePairs([a, b], existing, 'text-embedding-3-small', undefined, 0.85)).toHaveLength(1);
   });
 
   it('checks caller action scope separately from RLS-visible reads', () => {

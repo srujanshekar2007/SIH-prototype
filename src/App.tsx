@@ -195,7 +195,7 @@ function Overlap({rows,cases,onReview,onRefresh,openCase,canReview,canGenerate}:
   try{
    const {data:{session:currentSession}}=await supabase.auth.getSession();
    if(!currentSession?.access_token){setMessage('Your session expired. Sign in again, then retry.');return}
-   const response=await fetch('/api/overlap/matches',{method:'POST',headers:{Authorization:`Bearer ${currentSession.access_token}`}});
+   const response=await fetch('/api/overlap/matches',{method:'POST',headers:{Authorization:`Bearer ${currentSession.access_token}`,'Content-Type':'application/json'},body:JSON.stringify({threshold:minimumSimilarity==='all'?null:Number(minimumSimilarity)})});
    const result=await readAiMatchesResponse(response);
    setMessage(`${result.generated} relationship record(s) added or refreshed; ${result.evaluated} candidates evaluated. Model: ${result.model}; cosine threshold: ${Number(result.threshold).toFixed(2)}. This score is not a probability or duplicate confirmation.`);
    await onRefresh();

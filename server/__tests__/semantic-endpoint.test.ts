@@ -9,14 +9,14 @@ afterEach(() => {
   mockClients.createClient.mockReset();
 });
 
-function run(headers: Record<string, string> = {}, method = 'POST') {
+function run(headers: Record<string, string> = {}, method = 'POST', body?: unknown) {
   const state: { code: number; body: unknown } = { code: 200, body: null };
   const response = {
     setHeader: vi.fn(),
     status(code: number) { state.code = code; return this; },
     json(body: unknown) { state.body = body; return this; },
   };
-  return handler({ method, headers } as any, response as any).then(() => state);
+  return handler({ method, headers, body } as any, response as any).then(() => state);
 }
 
 function configureServer() {
@@ -62,5 +62,24 @@ describe('AI overlap endpoint authorization/configuration', () => {
     configureServer();
     expect((await run()).code).toBe(401);
     expect((await run({ authorization: 'Bearer x' }, 'GET')).code).toBe(405);
+  });
+
+  it('rejects an invalid requested threshold as JSON before reading complaint records', async () => {
+    configureServer();
+    const profileQuery: any = {
+      select: () => profileQuery,
+      eq: () => profileQuery,
+      maybeSingle: async () => ({ data: { id: 'official', role: 'rb_officer', is_admin: false, active: true, bureau_id: 'bureau', can_manage_bureau: true }, error: null }),
+    };
+    const complaintRead = vi.fn(() => { throw new Error('Complaint query should not occur for an invalid threshold'); });
+    const caller = {
+      auth: { getUser: async () => ({ data: { user: { id: 'official' } }, error: null }) },
+      from: (table: string) => table === 'profiles' ? profileQuery : complaintRead(),
+    };
+    mockClients.createClient.mockReturnValueOnce(caller).mockReturnValueOnce({});
+    const result = await run({ authorization: 'Bearer signed-in-token' }, 'POST', { threshold: '0.65' });
+    expect(result.code).toBe(400);
+    expect(result.body).toMatchObject({ code: 'invalid_threshold' });
+    expect(complaintRead).not.toHaveBeenCalled();
   });
 });
