@@ -47,6 +47,12 @@ describe('role dashboard scope',()=>{
     expect(summarizeReportCases(rows,new Date('2026-01-05T00:00:00.000Z'))).toEqual({total:3,pending:1,underProcess:1,disposed:1,overdue:2,disposalRate:33});
     expect(summarizeReportCases([]).disposalRate).toBeNull();
   });
+
+  it('does not present a failed relationship summary as a genuine zero',()=>{
+    const cards=buildDashboardCards('administrator',cases,null,[],[],[],{id:'admin',is_admin:true});
+    expect(cards.find(([label])=>label==='Potential relationships')?.[1]).toBe('Unavailable');
+    expect(cards.find(([label])=>label==='Cases requiring attention')?.[1]).toBe('Unavailable');
+  });
   it('uses the database relationship summary for dashboard counts and affected cases',()=>{
     const summary={pending_count:2,case_ids:['1','3'],by_bureau:[],recent:[]};
     const cards=buildDashboardCards('administrator',cases,summary,[],[],[],{id:'admin',is_admin:true});
