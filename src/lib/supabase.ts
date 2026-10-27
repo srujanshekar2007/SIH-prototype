@@ -72,3 +72,14 @@ export async function fetchCaseActions(client: SupabaseClient) {
     .select('id,complaint_id,action_type,remarks,status_before,status_after,actor:profiles!case_actions_actor_id_fkey(display_name),created_at,actor_id')
     .order('created_at', { ascending: false }).range(from, to));
 }
+
+/** Counts only the current user's RLS-visible transfer records for a Bureau dashboard. */
+export async function fetchBureauTransferCounts(client: SupabaseClient, bureauId: string) {
+  const [incoming, outgoing] = await Promise.all([
+    client.from('transfers').select('id', { count: 'exact', head: true }).eq('to_bureau_id', bureauId),
+    client.from('transfers').select('id', { count: 'exact', head: true }).eq('from_bureau_id', bureauId),
+  ]);
+  if (incoming.error) return { data: null as { inBureau: number; outBureau: number } | null, error: incoming.error };
+  if (outgoing.error) return { data: null as { inBureau: number; outBureau: number } | null, error: outgoing.error };
+  return { data: { inBureau: incoming.count ?? 0, outBureau: outgoing.count ?? 0 }, error: null as any };
+}

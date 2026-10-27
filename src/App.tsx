@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, AlertTriangle, ArrowDownLeft, ArrowLeftRight, BarChart3, Bell, Building2, Check, ChevronDown, ClipboardList, Clock3, FileText, Filter, Gauge, LogOut, Menu, MessageSquare, Mic, Moon, Plus, RefreshCw, Search, Send, ShieldCheck, Sparkles, Sun, Users, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { fetchAllPages, fetchCaseActions, fetchComplaintCases, fetchDashboardRelationshipSummary, fetchRelationshipReviews, friendlyError, isSupabaseConfigured, supabase, type CaseRow, type DashboardRelationshipSummary } from './lib/supabase';
+import { fetchAllPages, fetchBureauTransferCounts, fetchCaseActions, fetchComplaintCases, fetchDashboardRelationshipSummary, fetchRelationshipReviews, friendlyError, isSupabaseConfigured, supabase, type CaseRow, type DashboardRelationshipSummary } from './lib/supabase';
 import { buildDashboardCards, casesForDashboard, dashboardKind, filterReportCases, isPastNextAction, makeChartData, summarizeReportCases } from './lib/dashboard';
 import { fetchUserProfile } from './lib/profile';
 import { recordRelationshipReview } from './lib/relationship-review';
@@ -20,8 +20,9 @@ const safeDateTime=(s?:string|null)=>s?new Date(s).toLocaleString('en-IN',{day:'
 const missingPlanningColumns=(error:any)=>{const message=String(error?.message||'').toLowerCase();return ['expected_disposal_at','next_action_required'].some(field=>message.includes(field))&&['42703','PGRST204'].includes(error?.code)};
 export default function App(){
  const [theme,setTheme]=useState<'light'|'dark'>(()=>{try{const stored=localStorage.getItem('aicte-theme');if(stored==='dark'||stored==='light')return stored}catch{/* Use the preloaded document theme when storage is unavailable. */}return document.documentElement.dataset.theme==='dark'?'dark':'light'});
- const [page,setPage]=useState<Page>('Dashboard'),[mobileNav,setMobileNav]=useState(false),[session,setSession]=useState<any>(null),[profile,setProfile]=useState<any>(null),[profileLoading,setProfileLoading]=useState(true),[profileError,setProfileError]=useState(''),[profileRetry,setProfileRetry]=useState(0),[lastUpdated,setLastUpdated]=useState<Date|null>(null),[coordination,setCoordination]=useState<any[]>([]),[bureaus,setBureaus]=useState<any[]>([]),[transfers,setTransfers]=useState<any[]>([]),[audits,setAudits]=useState<any[]>([]),[officers,setOfficers]=useState<any[]>([]),[authLoading,setAuthLoading]=useState(true),[passwordRecovery,setPasswordRecovery]=useState(false),[loading,setLoading]=useState(false),[queueLoading,setQueueLoading]=useState(false),[queueError,setQueueError]=useState(''),[relationshipSummaryError,setRelationshipSummaryError]=useState(''),[relationshipSummaryLoading,setRelationshipSummaryLoading]=useState(false),[error,setError]=useState(''),[complaintError,setComplaintError]=useState(''),[cases,setCases]=useState<CaseRow[]>([]),[actions,setActions]=useState<any[]>([]),[institutions,setInstitutions]=useState<any[]>([]),[overlaps,setOverlaps]=useState<any[]>([]),[relationshipSummary,setRelationshipSummary]=useState<DashboardRelationshipSummary|null>(null),[search,setSearch]=useState(''),[filter,setFilter]=useState('All statuses'),[chatOpen,setChatOpen]=useState(false),[chatInput,setChatInput]=useState(''),[messages,setMessages]=useState<{from:'assistant'|'user';text:string}[]>([{from:'assistant',text:'Hello! I can help you navigate this complaint monitoring website. What would you like to know?'}]),[toast,setToast]=useState(''),[selectedCase,setSelectedCase]=useState<CaseRow|null>(null),[selectedInstitution,setSelectedInstitution]=useState<any|null>(null),[modal,setModal]=useState('');
+ const [page,setPage]=useState<Page>('Dashboard'),[mobileNav,setMobileNav]=useState(false),[session,setSession]=useState<any>(null),[profile,setProfile]=useState<any>(null),[profileLoading,setProfileLoading]=useState(true),[profileError,setProfileError]=useState(''),[profileRetry,setProfileRetry]=useState(0),[lastUpdated,setLastUpdated]=useState<Date|null>(null),[coordination,setCoordination]=useState<any[]>([]),[openCoordination,setOpenCoordination]=useState<any[]>([]),[bureaus,setBureaus]=useState<any[]>([]),[transfers,setTransfers]=useState<any[]>([]),[transferCounts,setTransferCounts]=useState<{inBureau:number;outBureau:number}|null>(null),[audits,setAudits]=useState<any[]>([]),[officers,setOfficers]=useState<any[]>([]),[authLoading,setAuthLoading]=useState(true),[passwordRecovery,setPasswordRecovery]=useState(false),[loading,setLoading]=useState(false),[pageDataLoading,setPageDataLoading]=useState(false),[queueLoading,setQueueLoading]=useState(false),[queueError,setQueueError]=useState(''),[relationshipSummaryError,setRelationshipSummaryError]=useState(''),[relationshipSummaryLoading,setRelationshipSummaryLoading]=useState(false),[error,setError]=useState(''),[complaintError,setComplaintError]=useState(''),[cases,setCases]=useState<CaseRow[]>([]),[actions,setActions]=useState<any[]>([]),[institutions,setInstitutions]=useState<any[]>([]),[overlaps,setOverlaps]=useState<any[]>([]),[relationshipSummary,setRelationshipSummary]=useState<DashboardRelationshipSummary|null>(null),[search,setSearch]=useState(''),[filter,setFilter]=useState('All statuses'),[chatOpen,setChatOpen]=useState(false),[chatInput,setChatInput]=useState(''),[messages,setMessages]=useState<{from:'assistant'|'user';text:string}[]>([{from:'assistant',text:'Hello! I can help you navigate this complaint monitoring website. What would you like to know?'}]),[toast,setToast]=useState(''),[selectedCase,setSelectedCase]=useState<CaseRow|null>(null),[selectedInstitution,setSelectedInstitution]=useState<any|null>(null),[modal,setModal]=useState('');
  const sessionStartedAtRef=useRef<number|null>(null),sessionRef=useRef<any>(null),expiredSignOutRef=useRef(false),expireSessionRef=useRef<()=>void>(()=>{});
+ const coreLoadInFlightRef=useRef(false),queueLoadInFlightRef=useRef(false),loadedPageDataRef=useRef(new Map<string,number>()),pendingPageDataRef=useRef(new Map<string,Promise<void>>());
  sessionRef.current=session;
  useEffect(()=>{document.documentElement.dataset.theme=theme;try{localStorage.setItem('aicte-theme',theme)}catch{/* Theme remains active for this session when storage is unavailable. */}},[theme]);
  useEffect(()=>{
@@ -41,7 +42,7 @@ export default function App(){
   if(!supabase){setAuthLoading(false);return}
   let mounted=true,authEventReceived=false;
   const storage=(()=>{try{return window.sessionStorage}catch{return {getItem:()=>null,setItem:()=>{},removeItem:()=>{}}}})();
-  const clearProtectedData=()=>{setProfile(null);setProfileError('');setProfileLoading(false);setComplaintError('');setCases([]);setActions([]);setInstitutions([]);setOverlaps([]);setRelationshipSummary(null);setRelationshipSummaryError('');setRelationshipSummaryLoading(false);setCoordination([]);setBureaus([]);setTransfers([]);setAudits([]);setOfficers([]);setLastUpdated(null)};
+  const clearProtectedData=()=>{setProfile(null);setProfileError('');setProfileLoading(false);setComplaintError('');setCases([]);setActions([]);setInstitutions([]);setOverlaps([]);setRelationshipSummary(null);setRelationshipSummaryError('');setRelationshipSummaryLoading(false);setCoordination([]);setOpenCoordination([]);setBureaus([]);setTransfers([]);setTransferCounts(null);setAudits([]);setOfficers([]);setLastUpdated(null);loadedPageDataRef.current.clear();pendingPageDataRef.current.clear();coreLoadInFlightRef.current=false;queueLoadInFlightRef.current=false};
   const expireSession=()=>{
    if(expiredSignOutRef.current)return;
    expiredSignOutRef.current=true;
@@ -55,6 +56,7 @@ export default function App(){
   const acceptSession=(next:any)=>{
    if(!mounted)return;
    if(!next){clearSessionStartedAt(sessionRef.current,storage);sessionStartedAtRef.current=null;sessionRef.current=null;setSession(null);clearProtectedData();setAuthLoading(false);return}
+   if(sessionRef.current?.user?.id&&sessionRef.current.user.id!==next.user.id)clearProtectedData();
    const sameAuthSession=getSessionTimestampKey(sessionRef.current)===getSessionTimestampKey(next);
    const startedAt=sameAuthSession&&sessionStartedAtRef.current!==null?sessionStartedAtRef.current:getSessionStartedAt(next,storage);
    sessionStartedAtRef.current=startedAt;
@@ -93,41 +95,62 @@ export default function App(){
  useEffect(()=>{if(session&&sessionStartedAtRef.current!==null&&isSessionAgeExpired(sessionStartedAtRef.current))expireSessionRef.current()},[session,page]);
  useEffect(()=>{let live=true;if(!session?.user||!supabase){setProfile(null);setProfileError('');setProfileLoading(false);return}setProfileLoading(true);setProfileError('');setProfile(null);const timeout=window.setTimeout(()=>{if(live){setProfileError('The profile lookup is taking too long. Check your Supabase connection and retry.');setProfileLoading(false)}},15000);fetchUserProfile(supabase,session.user.id).then(({data,error:profileQueryError})=>{window.clearTimeout(timeout);if(live){setProfile(data);setProfileError(profileQueryError?friendlyError(profileQueryError):'');setProfileLoading(false)}}).catch((profileQueryError)=>{window.clearTimeout(timeout);if(live){setProfile(null);setProfileError(friendlyError(profileQueryError));setProfileLoading(false)}});return()=>{live=false;window.clearTimeout(timeout)}},[session,profileRetry]);
  const load=async()=>{
-  if(!supabase||!session||!profile||!profile.active||dashboardKind(profile)==='denied')return;
-  setLoading(true);setError('');setComplaintError('');setRelationshipSummaryLoading(true);
-  const peopleQuery=profile.is_admin
-   ?fetchAllPages<any>((from,to)=>supabase!.from('profiles').select('id,display_name,bureau_id,role,active').eq('active',true).order('display_name').range(from,to))
-   :dashboardKind(profile)==='bureau'
-    ?fetchAllPages<any>((from,to)=>supabase!.from('profiles').select('id,display_name,bureau_id,role,active').eq('active',true).eq('bureau_id',profile.bureau_id).order('display_name').range(from,to))
-    :Promise.resolve({data:[],error:null});
-  const [c,i,summary,a,q,t,b,l,u]=await Promise.all([
-   fetchComplaintCases(supabase!),
-   fetchAllPages<any>((from,to)=>supabase!.from('institutions').select('id,name,internal_id,aicte_permanent_id,address,region').order('name').range(from,to)),
-   fetchDashboardRelationshipSummary(supabase!),
-   fetchCaseActions(supabase!),
-   fetchAllPages<any>((from,to)=>supabase!.from('coordination_requests').select('id,complaint_id,status,message,response,from_bureau_id,to_bureau_id,created_at').order('created_at',{ascending:false}).range(from,to)),
-   fetchAllPages<any>((from,to)=>supabase!.from('transfers').select('id,complaint_id,from_bureau_id,to_bureau_id,transfer_type,created_at,from_bureau:bureaus!transfers_from_bureau_id_fkey(name),to_bureau:bureaus!transfers_to_bureau_id_fkey(name)').order('created_at',{ascending:false}).range(from,to)),
-   fetchAllPages<any>((from,to)=>supabase!.from('bureaus').select('id,name,code').eq('active',true).order('name').range(from,to)),
-   profile.is_admin?supabase.from('audit_logs').select('id,actor_id,entity_type,entity_id,action,created_at').order('created_at',{ascending:false}).limit(50):Promise.resolve({data:[],error:null}),
-   peopleQuery,
-  ]);
-  setComplaintError(c.error?friendlyError(c.error):'');
-  const failures=[['complaints',c],['institutions',i],['actions',a],['coordination',q],['transfers',t],['Bureaus',b],...(profile.is_admin?[['audit history',l] as any[]]:[]),...(dashboardKind(profile)==='administrator'||dashboardKind(profile)==='bureau'?[['officer profiles',u] as any[]]:[])].filter(([,result]:any)=>result.error);
-  if(failures.length)setError(failures.map(([name,result]:any)=>`${name}: ${friendlyError(result.error)}`).join(' · '));
-  if(!c.error)setCases((c.data||[]) as unknown as CaseRow[]);
-  if(!i.error)setInstitutions(i.data||[]);
-  if(!summary.error&&summary.data){setRelationshipSummary(summary.data);setRelationshipSummaryError('')}
-  else{setRelationshipSummary(null);setRelationshipSummaryError(summary.error?friendlyError(summary.error):'The relationship summary returned no data.')}
-  setRelationshipSummaryLoading(false);
-  if(!a.error)setActions(Array.isArray(a.data)?a.data:[]);
-  if(!q.error)setCoordination(q.data||[]);
-  if(!t.error)setTransfers(t.data||[]);
-  if(!b.error)setBureaus(b.data||[]);
-  if(!l.error)setAudits(l.data||[]);
-  if(!u.error)setOfficers(u.data||[]);
-  if(!failures.length)setLastUpdated(new Date());
-  setLoading(false);
+  if(!supabase||!session||!profile||!profile.active||dashboardKind(profile)==='denied'||coreLoadInFlightRef.current)return;
+  coreLoadInFlightRef.current=true;setLoading(true);setError('');setComplaintError('');setRelationshipSummaryLoading(true);
+  try{
+   const bureauScoped=dashboardKind(profile)==='bureau';
+   const [c,summary,a,q,l,transferSummary]=await Promise.all([
+    fetchComplaintCases(supabase),
+    fetchDashboardRelationshipSummary(supabase),
+    fetchCaseActions(supabase),
+    fetchAllPages<any>((from,to)=>supabase!.from('coordination_requests').select('id,complaint_id,status,created_at').eq('status','open').order('created_at',{ascending:false}).range(from,to)),
+    profile.is_admin?supabase.from('audit_logs').select('id,actor_id,entity_type,entity_id,action,created_at').order('created_at',{ascending:false}).limit(50):Promise.resolve({data:[],error:null}),
+    bureauScoped&&profile.bureau_id?fetchBureauTransferCounts(supabase,profile.bureau_id):Promise.resolve({data:{inBureau:0,outBureau:0},error:null}),
+   ]);
+   setComplaintError(c.error?friendlyError(c.error):'');
+   const failures=[['complaints',c],['actions',a],['open coordination requests',q],...(profile.is_admin?[['audit history',l] as any[]]:[]),...(bureauScoped?[['transfer summary',transferSummary] as any[]]:[])].filter(([,result]:any)=>result.error);
+   if(failures.length)setError(failures.map(([name,result]:any)=>`${name}: ${friendlyError(result.error)}`).join(' · '));
+   if(!c.error)setCases((c.data||[]) as unknown as CaseRow[]);
+   if(!summary.error&&summary.data){setRelationshipSummary(summary.data);setRelationshipSummaryError('')}
+   else{setRelationshipSummary(null);setRelationshipSummaryError(summary.error?friendlyError(summary.error):'The relationship summary returned no data.')}
+   setRelationshipSummaryLoading(false);
+   if(!a.error)setActions(Array.isArray(a.data)?a.data:[]);
+   if(!q.error)setOpenCoordination(q.data||[]);
+   if(!l.error)setAudits(l.data||[]);
+   if(!transferSummary.error)setTransferCounts(transferSummary.data);
+   else if(bureauScoped)setTransferCounts(null);
+   if(!failures.length)setLastUpdated(new Date());
+  }catch(reason){setError(friendlyError(reason));setComplaintError(friendlyError(reason));setRelationshipSummary(null);setRelationshipSummaryError(friendlyError(reason))}
+  finally{setRelationshipSummaryLoading(false);setLoading(false);coreLoadInFlightRef.current=false}
  };
+ const ensurePageData=async(key:string,query:()=>Promise<any>,apply:(data:any)=>void,force=false)=>{
+  if(!supabase||!session)return;
+  const scopedKey=`${session.user.id}:${profile?.role||''}:${profile?.bureau_id||''}:${profile?.is_admin?'admin':'user'}:${key}`;
+  const loadedAt=loadedPageDataRef.current.get(scopedKey);
+  if(!force&&loadedAt&&Date.now()-loadedAt<5*60_000)return;
+  const pending=pendingPageDataRef.current.get(scopedKey);if(pending)return pending;
+  setPageDataLoading(true);
+  const task=(async()=>{try{const result=await query();if(result.error){setError(`${key}: ${friendlyError(result.error)}`);return}apply(result.data||[]);loadedPageDataRef.current.set(scopedKey,Date.now())}catch(reason){setError(`${key}: ${friendlyError(reason)}`)}finally{pendingPageDataRef.current.delete(scopedKey);setPageDataLoading(pendingPageDataRef.current.size>0)}})();
+  pendingPageDataRef.current.set(scopedKey,task);
+  return task;
+ };
+ const loadPageData=async(target:Page,force=false)=>{
+  if(!supabase||!session)return;
+  if(target==='Institutions'||target==='Complaint Registry'){
+   const tasks=[ensurePageData('institutions',()=>fetchAllPages<any>((from,to)=>supabase!.from('institutions').select('id,name,internal_id,aicte_permanent_id,address,region').order('name').range(from,to)),setInstitutions,force)];
+   if(target==='Complaint Registry'&&profile?.is_admin)tasks.push(ensurePageData('bureaus',()=>fetchAllPages<any>((from,to)=>supabase!.from('bureaus').select('id,name,code').eq('active',true).order('name').range(from,to)),setBureaus,force));
+   await Promise.all(tasks);
+  }
+  if(target==='Transfers & Escalations')await ensurePageData('transfers',()=>fetchAllPages<any>((from,to)=>supabase!.from('transfers').select('id,complaint_id,from_bureau_id,to_bureau_id,transfer_type,created_at,from_bureau:bureaus!transfers_from_bureau_id_fkey(name),to_bureau:bureaus!transfers_to_bureau_id_fkey(name)').order('created_at',{ascending:false}).range(from,to)),setTransfers,force);
+  if(target==='Coordination Workspace')await Promise.all([
+   ensurePageData('coordination',()=>fetchAllPages<any>((from,to)=>supabase!.from('coordination_requests').select('id,complaint_id,status,message,response,from_bureau_id,to_bureau_id,created_at').order('created_at',{ascending:false}).range(from,to)),setCoordination,force),
+   ensurePageData('bureaus',()=>fetchAllPages<any>((from,to)=>supabase!.from('bureaus').select('id,name,code').eq('active',true).order('name').range(from,to)),setBureaus,force),
+  ]);
+ };
+ const loadOfficers=async()=>ensurePageData('officers',()=>profile?.is_admin
+  ?fetchAllPages<any>((from,to)=>supabase!.from('profiles').select('id,display_name,bureau_id,role,active').eq('active',true).order('display_name').range(from,to))
+  :fetchAllPages<any>((from,to)=>supabase!.from('profiles').select('id,display_name,bureau_id,role,active').eq('active',true).eq('bureau_id',profile?.bureau_id).order('display_name').range(from,to)),setOfficers);
+ const invalidatePageData=(keys:string[])=>{for(const key of keys){for(const cacheKey of loadedPageDataRef.current.keys())if(cacheKey.endsWith(`:${key}`))loadedPageDataRef.current.delete(cacheKey)}};
  const retryRelationshipSummary=async()=>{
   if(!supabase)return;
   setRelationshipSummaryLoading(true);setRelationshipSummaryError('');
@@ -136,7 +159,8 @@ export default function App(){
   finally{setRelationshipSummaryLoading(false)}
  };
  const loadRelationshipQueue=async()=>{
-  if(!supabase||!session||!profile?.active)return;
+  if(!supabase||!session||!profile?.active||queueLoadInFlightRef.current)return;
+  queueLoadInFlightRef.current=true;
   setQueueLoading(true);
   setQueueError('');
   try{
@@ -144,14 +168,17 @@ export default function App(){
    if(result.error)setQueueError(friendlyError(result.error));
    else setOverlaps(result.data||[]);
   }catch(reason){setQueueError(friendlyError(reason))}
-  finally{setQueueLoading(false)}
+  finally{setQueueLoading(false);queueLoadInFlightRef.current=false}
  };
- const refreshOverlapPage=async()=>{await load();if(page==='Overlap Monitoring')await loadRelationshipQueue()};
+ const refreshOverlapPage=async()=>{await load();await loadPageData(page,true);if(page==='Overlap Monitoring')await loadRelationshipQueue()};
+ const openComplaintModal=async()=>{await loadPageData('Complaint Registry');setModal('case')};
+ useEffect(()=>{void loadPageData(page)},[page,session,profile]);
  useEffect(()=>{if(page==='Overlap Monitoring')void loadRelationshipQueue()},[page,session,profile]);
  useEffect(()=>{void load()},[session,profile]);
  useEffect(()=>{if(!session||!profile?.active)return;const timer=window.setInterval(()=>{if(document.visibilityState==='visible')void load()},5*60_000);return()=>window.clearInterval(timer)},[session,profile]);
- const filtered=useMemo(()=>cases.filter(c=>(filter==='All statuses'||(filter==='Overdue'?isPastNextAction(c):filter==='Unassigned'?!c.assigned_officer_id:c.status.toLowerCase()===filter.toLowerCase()))&&(!search||[c.case_number,c.institutions?.name,c.institutions?.internal_id,c.institutions?.aicte_permanent_id,c.institutions?.region,c.category,c.bureaus?.name].some(x=>x?.toLowerCase().includes(search.toLowerCase())))),[cases,filter,search]);
+ const deferredSearch=useDeferredValue(search.trim().toLowerCase());const filtered=useMemo(()=>cases.filter(c=>(filter==='All statuses'||(filter==='Overdue'?isPastNextAction(c):filter==='Unassigned'?!c.assigned_officer_id:c.status.toLowerCase()===filter.toLowerCase()))&&(!deferredSearch||[c.case_number,c.institutions?.name,c.institutions?.internal_id,c.institutions?.aicte_permanent_id,c.institutions?.region,c.category,c.bureaus?.name].some(x=>x?.toLowerCase().includes(deferredSearch)))),[cases,filter,deferredSearch]);
  const go=(p:Page)=>{setPage(p);setMobileNav(false)};const openCase=(key:string)=>{const match=cases.find(c=>c.id===key||c.case_number===key);if(match)setSelectedCase(match);else{go('Complaint Registry');setSearch(key)}};const openMetric=(key:string)=>{if(key==='overlap'){go('Overlap Monitoring');return}if(key==='awaiting'){go('Coordination Workspace');return}if(key==='attention'){go('Alerts & Deadlines');return}if(key==='institutions'){go('Institutions');return}if(key==='recent'||key==='disposed_by_you'){go('Workflow & History');return}if(key==='transferred_in'||key==='transferred_out'){go('Transfers & Escalations');return}if(key==='deadline_config'){go('Alerts & Deadlines');return}setFilter(key==='all'?'All statuses':key);setSearch('');go('Complaint Registry')};
+ const kind=dashboardKind(profile);const pendingOverlaps=relationshipSummary?.recent||[];const dashboardCases=useMemo(()=>session?.user?.id?casesForDashboard(cases,kind,session.user.id,profile):[],[cases,kind,profile,session?.user?.id]);const chartData=useMemo(()=>makeChartData(dashboardCases,actions),[dashboardCases,actions]);const bureauData=chartData.bureau;const cards=useMemo(()=>buildDashboardCards(kind,dashboardCases,relationshipSummary,openCoordination,kind==='bureau'?transferCounts:[],actions,profile),[kind,dashboardCases,relationshipSummary,openCoordination,transferCounts,actions,profile]);
  const logout=async()=>{if(!supabase)return;const {error}=await supabase.auth.signOut({scope:'local'});if(error)throw error};
  const logoutEverywhere=async()=>{if(!supabase)return;const {error}=await supabase.auth.signOut({scope:'global'});if(error)throw error};
  const showToast=(s:string)=>{setToast(s);setTimeout(()=>setToast(''),3200)};
@@ -161,27 +188,28 @@ export default function App(){
  if(profileLoading)return <div className="center-screen"><div className="spinner"/>Loading role permissions…</div>;
  if(profileError)return <div className="center-screen access-denied"><div><ShieldCheck size={28}/><h2>Profile could not be loaded</h2><p>{profileError}</p><div className="access-actions"><button className="button primary" onClick={()=>setProfileRetry((attempt:number)=>attempt+1)}>Retry</button><button className="button secondary" onClick={()=>void logout().catch((reason)=>window.alert(friendlyError(reason)))}>Sign out</button></div></div></div>;
  if(!profile||!profile.active)return <div className="center-screen access-denied"><div><ShieldCheck size={28}/><h2>Profile not active</h2><p>Your Auth account has no active authorized profile. Contact your system administrator.</p><button className="button secondary" onClick={()=>void logout().catch((reason)=>window.alert(friendlyError(reason)))}>Sign out</button></div></div>;
- const kind=dashboardKind(profile);if(kind==='denied')return <div className="center-screen access-denied"><div><ShieldCheck size={28}/><h2>No dashboard scope</h2><p>Your profile has no recognized dashboard role. Contact a designated administrator.</p><button className="button secondary" onClick={()=>void logout().catch((reason)=>window.alert(friendlyError(reason)))}>Sign out</button></div></div>;const pendingOverlaps=relationshipSummary?.recent||[];const dashboardCases=casesForDashboard(cases,kind,session.user.id,profile);const chartData=makeChartData(dashboardCases,actions);const bureauData=chartData.bureau;const cards=buildDashboardCards(kind,dashboardCases,relationshipSummary,coordination,transfers,actions,profile);const bureauName=profile.bureaus?.name||'Bureau/Cell';
+ if(kind==='denied')return <div className="center-screen access-denied"><div><ShieldCheck size={28}/><h2>No dashboard scope</h2><p>Your profile has no recognized dashboard role. Contact a designated administrator.</p><button className="button secondary" onClick={()=>void logout().catch((reason)=>window.alert(friendlyError(reason)))}>Sign out</button></div></div>;const bureauName=profile.bureaus?.name||'Bureau/Cell';
  return <div className="app-shell"><div className="ambient-background" aria-hidden="true"><div className="ambient-orb orb-1"/><div className="ambient-orb orb-2"/><div className="ambient-orb orb-3"/></div><aside id="primary-navigation" className={`sidebar ${mobileNav?'open':''}`}><div className="brand"><div className="brand-mark">A</div><div><b>AICTE</b><small>CASE MONITORING</small></div><button className="mobile-close" onClick={()=>setMobileNav(false)} aria-label="Close navigation"><X size={18}/></button></div><div className="side-scroll">{NAV.map(section=><div className="nav-group" key={section.group}><div className="nav-label">{section.group}</div>{section.items.map(({name,icon:Icon})=><button className={`nav-item ${page===name?'active':''}`} key={name} onClick={()=>go(name)}><Icon size={17}/><span>{name}</span>{name==='Alerts & Deadlines'&&cases.some(c=>c.next_action_at&&new Date(c.next_action_at)<new Date()&&c.status!=='Disposed')&&<i className="nav-dot"/>}</button>)}</div>)}{profile?.is_admin&&<div className="nav-group"><div className="nav-label">ADMINISTRATION</div><button className={`nav-item ${page==='User & Role Management'?'active':''}`} onClick={()=>go('User & Role Management')}><Users size={17}/><span>User & Role Management</span></button></div>}</div><div className="sidebar-footer"><span className="status-live"/><span>Secure workspace</span><span className="version">v1.0</span></div></aside>
  {mobileNav&&<button className="scrim" onClick={()=>setMobileNav(false)} aria-label="Close navigation overlay"/>}<main className="main"><header className="topbar"><button className="icon-btn mobile-menu" type="button" aria-label={mobileNav?'Close navigation':'Open navigation'} aria-controls="primary-navigation" aria-expanded={mobileNav} onClick={()=>setMobileNav(open=>!open)}>{mobileNav?<X size={19}/>:<Menu size={19}/>}</button><div className="crumb">Workspace <span>/</span> <b>{page}</b></div><div className="top-actions"><button className="icon-btn" aria-label="Refresh data" onClick={()=>void refreshOverlapPage()}><RefreshCw size={17}/></button><NotificationBell cases={cases} loading={loading} error={complaintError} onRetry={()=>void load()} onOpenCase={openCase}/><button className="icon-btn theme-toggle" aria-label={`Switch to ${theme==='light'?'dark':'light'} mode`} title={`Switch to ${theme==='light'?'dark':'light'} mode`} aria-pressed={theme==='dark'} onClick={()=>setTheme(theme==='light'?'dark':'light')}>{theme==='light'?<Moon size={17}/>:<Sun size={17}/>}</button><div className="user-menu"><div className="avatar">{(profile?.display_name||session.user.email||'U').slice(0,1).toUpperCase()}</div><div className="user-copy"><b>{profile?.display_name||session.user.email?.split('@')[0]}</b><small>{profile?.bureaus?.name||profile?.role||'Official'}</small></div><button className="icon-btn" onClick={()=>void logout().catch((reason)=>window.alert(friendlyError(reason)))} aria-label="Sign out"><LogOut size={16}/></button></div></div></header>
  <section className="page-content"><div className="page-heading"><div><div className="eyebrow">AICTE · INSTITUTIONAL GRIEVANCE MONITORING</div><h1>{page}</h1><p>{page==='Dashboard'?'A consolidated view of authorized complaint activity and actions requiring attention.':pageDescription(page)}</p></div>{page==='Dashboard'&&<button className="button secondary" onClick={()=>void load()}><RefreshCw size={15}/> Refresh data</button>}</div>
  {!isSupabaseConfigured&&<div className="notice warning"><AlertTriangle size={18}/><div><b>Supabase is not configured</b><span>Add the project URL and anon key to <code>.env.local</code>, then restart the dev server. Until then, no case data is loaded.</span></div></div>}
  {error&&<div className="notice danger"><AlertTriangle size={18}/><div><b>Data could not be loaded</b><span>{error}</span></div><button className="button subtle" onClick={()=>void refreshOverlapPage()}>Retry</button></div>}
  {loading&&<div className="loading-strip"><div className="spinner small"/>Refreshing authorized records…</div>}
- {page==='Dashboard'&&<Dashboard kind={kind} bureauName={bureauName} profile={profile} userId={session.user.id} cards={cards} chartData={chartData} bureauData={bureauData} cases={dashboardCases} overlaps={pendingOverlaps} relationshipSummary={relationshipSummary} relationshipSummaryError={relationshipSummaryError} relationshipSummaryLoading={relationshipSummaryLoading} onRetryRelationshipSummary={retryRelationshipSummary} actions={actions} coordination={coordination} transfers={transfers} audits={audits} lastUpdated={lastUpdated} onRefresh={load} go={go} openMetric={openMetric} openCase={openCase}/ >}
- {page==='Complaint Registry'&&<Registry rows={filtered} search={search} setSearch={setSearch} filter={filter} setFilter={setFilter} onSelect={(c:CaseRow)=>{setSelectedCase(c)}} onNew={()=>setModal('case')} allowCreate={kind==='administrator'||kind==='bureau'}/>}
+ {pageDataLoading&&<div className="loading-strip"><div className="spinner small"/>Loading this section…</div>}
+ {page==='Dashboard'&&<Dashboard kind={kind} bureauName={bureauName} profile={profile} userId={session.user.id} cards={cards} chartData={chartData} bureauData={bureauData} cases={dashboardCases} overlaps={pendingOverlaps} relationshipSummary={relationshipSummary} relationshipSummaryError={relationshipSummaryError} relationshipSummaryLoading={relationshipSummaryLoading} onRetryRelationshipSummary={retryRelationshipSummary} actions={actions} coordination={openCoordination} audits={audits} lastUpdated={lastUpdated} onRefresh={load} go={go} openMetric={openMetric} openCase={openCase}/ >}
+ {page==='Complaint Registry'&&<Registry rows={filtered} search={search} setSearch={setSearch} filter={filter} setFilter={setFilter} onSelect={(c:CaseRow)=>{setSelectedCase(c)}} onNew={()=>void openComplaintModal()} allowCreate={kind==='administrator'||kind==='bureau'}/>}
  {page==='Institutions'&&<Institutions rows={institutions} cases={cases} search={search} setSearch={setSearch} onSelect={setSelectedInstitution}/>}
  {page==='Overlap Monitoring'&&<Overlap rows={overlaps} cases={cases} loading={queueLoading} queueError={queueError} onReview={reviewOverlap} onRefresh={refreshOverlapPage} canReview={kind!=='oversight'} canGenerate={kind!=='oversight'} openCase={openCase}/>}
  {page==='Workflow & History'&&<Workflow rows={cases} actions={actions} openCase={openCase}/>}
  {page==='Transfers & Escalations'&&<WorkQueue rows={cases} transfers={transfers} profile={profile} kind={kind} type="transfer" allowAction={kind!=='oversight'} openCase={openCase} onAction={(c:CaseRow)=>{setSelectedCase(c);setModal('transfer')}}/>}
- {page==='Alerts & Deadlines'&&<Alerts rows={cases} coordination={coordination} overlaps={pendingOverlaps} goCase={openCase}/>}
+ {page==='Alerts & Deadlines'&&<Alerts rows={cases} coordination={openCoordination} overlaps={pendingOverlaps} goCase={openCase}/>}
  {page==='Reports & Analytics'&&<Reports cases={cases} actions={actions} onExport={exportCSV}/>}
- {page==='Coordination Workspace'&&<Coordination rows={cases} profile={profile} requests={coordination} bureaus={bureaus} onRefresh={load} showToast={showToast} readOnly={kind==='oversight'} openCase={openCase}/>}
+ {page==='Coordination Workspace'&&<Coordination rows={cases} profile={profile} requests={coordination} bureaus={bureaus} onRefresh={refreshOverlapPage} showToast={showToast} readOnly={kind==='oversight'} openCase={openCase}/>}
  {page==='User & Role Management'&&<Admin/>}
  {page==='Profile & Security'&&<ProfileSecurity profile={profile} user={session.user} session={session} onSignOut={logout} onSignOutEverywhere={logoutEverywhere}/>}
  </section><footer className="footer">Administrative monitoring prototype <span>·</span> Not an official AICTE deployment</footer></main>
  <button className="help-launcher" aria-label={chatOpen?'Close AICTE Website Help Assistant':'Open AICTE Website Help Assistant'} onClick={()=>setChatOpen(!chatOpen)}><span className="help-orb"><Sparkles size={15}/></span><span>{chatOpen?'Close help':'Website help'}</span></button><Chat open={chatOpen} onClose={()=>setChatOpen(false)} messages={messages} setMessages={setMessages} input={chatInput} setInput={setChatInput}/>
- {toast&&<div className="toast" role="status"><Check size={17}/>{toast}</div>}{selectedCase&&<CaseModal row={selectedCase} readOnly={kind==='oversight'} canAssign={kind==='administrator'||kind==='bureau'} actions={actions.filter(a=>a.complaint_id===selectedCase.id)} onClose={()=>setSelectedCase(null)} onAction={(action:string)=>{setModal(action)}}/>}{selectedInstitution&&<InstitutionModal inst={selectedInstitution} cases={cases} onClose={()=>setSelectedInstitution(null)} openCase={(id:string)=>{setSelectedInstitution(null);openCase(id)}}/>}{modal&&<ActionModal type={modal} row={selectedCase} institutions={institutions} officers={officers} bureaus={bureaus} profile={profile} onClose={()=>setModal('')} onSuccess={(s:string)=>{setModal('');showToast(s);void load()}}/>}</div>;
+ {toast&&<div className="toast" role="status"><Check size={17}/>{toast}</div>}{selectedCase&&<CaseModal row={selectedCase} readOnly={kind==='oversight'} canAssign={kind==='administrator'||kind==='bureau'} actions={actions.filter(a=>a.complaint_id===selectedCase.id)} onClose={()=>setSelectedCase(null)} onAction={async(action:string)=>{if(action==='assignment')await loadOfficers();setModal(action)}}/>}{selectedInstitution&&<InstitutionModal inst={selectedInstitution} cases={cases} onClose={()=>setSelectedInstitution(null)} openCase={(id:string)=>{setSelectedInstitution(null);openCase(id)}}/>}{modal&&<ActionModal type={modal} row={selectedCase} institutions={institutions} officers={officers} bureaus={bureaus} profile={profile} onClose={()=>setModal('')} onSuccess={(s:string)=>{setModal('');showToast(s);invalidatePageData(['transfers','coordination']);void refreshOverlapPage()}}/>}</div>;
  async function reviewOverlap(id:string,decision:'confirmed'|'rejected'){ if(!supabase)return;const {error}=await recordRelationshipReview(supabase,id,decision,session.user.id);if(error)showToast(friendlyError(error));else{showToast(`Relationship ${decision}`);void refreshOverlapPage()} }
 }
 

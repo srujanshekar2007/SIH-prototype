@@ -59,4 +59,15 @@ describe('role dashboard scope',()=>{
     expect(cards.find(([label])=>label==='Potential relationships')?.[1]).toBe(2);
     expect(cards.find(([label])=>label==='Cases requiring attention')?.[1]).toBe(2);
   });
+  it('uses exact Bureau transfer counts without loading transfer history on the dashboard',()=>{
+    const transferCounts={inBureau:4,outBureau:2};
+    const cards=buildDashboardCards('bureau',cases,{},[],transferCounts,[],{id:'manager',bureau_id:'p'});
+    expect(cards.find(([label])=>label==='Transferred in')?.[1]).toBe(4);
+    expect(cards.find(([label])=>label==='Transferred out')?.[1]).toBe(2);
+  });
+  it('does not render missing Bureau transfer counts as a genuine zero',()=>{
+    const cards=buildDashboardCards('bureau',cases,{},[],null,[],{id:'manager',bureau_id:'p'});
+    expect(cards.find(([label])=>label==='Transferred in')?.[1]).toBe('Unavailable');
+    expect(cards.find(([label])=>label==='Transferred out')?.[1]).toBe('Unavailable');
+  });
 });
