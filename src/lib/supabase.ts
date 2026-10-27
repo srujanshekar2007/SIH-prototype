@@ -30,6 +30,21 @@ export async function fetchComplaintCases(client: SupabaseClient) {
   };
 }
 
+export async function fetchRelationshipReviews(client: SupabaseClient) {
+  const query = (columns: string) => fetchAllPages<any>((from, to) => client.from('case_relationships')
+    .select(columns).order('created_at', { ascending: false }).range(from, to));
+  const current = await query('id,source_case_id,target_case_id,relationship_type,review_status,match_reasons,semantic_similarity,semantic_model,algorithm_version,matching_fields,explanation,created_at,reviewed_at,review_note');
+  const message = [current.error?.message, current.error?.details, current.error?.hint].filter(Boolean).join(' ').toLowerCase();
+  const migrationMissing = ['semantic_similarity', 'semantic_model', 'matching_fields', 'explanation', 'reviewed_at', 'review_note'].some((column) => message.includes(column))
+    && ['42703', 'PGRST204'].includes(current.error?.code);
+  if (!migrationMissing) return current;
+  const baseline = await query('id,source_case_id,target_case_id,relationship_type,review_status,match_reasons,created_at,reviewed_at,review_note');
+  return baseline.error ? baseline : {
+    ...baseline,
+    data: (baseline.data || []).map((row: any) => ({ ...row, semantic_similarity: null, semantic_model: null, algorithm_version: null, matching_fields: [], explanation: {} })),
+  };
+}
+
 function isMissingAssignmentSchema(error: any) {
   const message = [error?.message, error?.details, error?.hint].filter(Boolean).join(' ').toLowerCase();
   return (message.includes('assigned_to') || message.includes('case_actions_assigned_to_fkey')) &&

@@ -1,76 +1,42 @@
 # SIH26264 · AICTE Complaint Monitoring Prototype
 
-An administrative monitoring prototype for authorized officials tracking institution-related complaints. It is not an official AICTE deployment and is not connected to live AICTE systems.
+An administrative prototype for authorized officials to track institution-related complaints, coordinate bureau workflows, review potential cross-bureau relationships, and monitor recorded deadlines. It is not an official AICTE deployment and is not connected to live AICTE systems.
 
-## Repository audit
+## Current capabilities
 
-The supplied workspace contained no source files, package configuration, existing UI, authentication implementation, or migrations. The project was bootstrapped with Vite, React, TypeScript, Supabase JS, Recharts, and Lucide icons. No existing data was found, and no seed data or accounts have been created.
+- Supabase Auth email/password login with provisioned accounts; public registration and self-selected roles are not provided.
+- Role-scoped dashboard, complaint registry, institution records, workflow/action history, transfers/escalations, coordination requests, overlap review, alerts, reports, and CSV export.
+- Rule-based relationship suggestions use shared institution records and cross-bureau cases as a review cue. This does not determine that complaints are duplicates.
+- Optional server-side semantic suggestions use OpenAI `text-embedding-3-small` embeddings. Similarity is raw cosine similarity, and every suggestion requires human review.
+- Website Help Assistant is deterministic local FAQ matching; it does not use a generative AI provider or complaint data.
 
-## Implemented
+## Local development
 
-- Supabase Auth email/password sign-in; no public registration or role picker.
-- Supabase-backed dashboard, case registry with status/attribute/date filters, searchable institution profiles (AICTE Permanent ID, address, region, and linked case history), overlap review, alerts, reports, and formula-safe CSV export. Dashboard data refreshes automatically every 60 seconds.
-- Case tracking includes assigned officer/Bureau, next action and date, optional expected-disposal date, last-action timestamp, chronological action history, and transfer/escalation history backed by append-only workflow/audit triggers.
-- Role-specific dashboards: designated administrators (`is_admin`), Bureau/Cell managers (`can_manage_bureau`), assigned RB/PGRC/generic Bureau officers, and read-only AICTE oversight. Counts/charts use RLS-visible records; individual officer case visibility is assignment-scoped.
-- Bureau-scoped officer workload, auditable assignment/reassignment events, authorized transfers, coordination requests/responses, overlap review, role-limited actions, and administrator-only audit summaries.
-- Responsive navy-sidebar administrative interface, status charts, empty/error/loading states, touch-sized mobile navigation, keyboard focus, and reduced-motion support.
-- Website Help Assistant remains local deterministic FAQ matching and does not access case data.
-- Complaint details include an optional local Ollama case summary. The local API verifies the Supabase access token and active profile, retrieves the case using the caller's RLS-scoped client, sends only that authorized record and its recent actions to Ollama on loopback, and does not persist the generated summary.
-
-## Local setup
-
-Prerequisites: Node.js 20.19+ or 22.12+, npm, and Ollama running locally with the configured model (default `qwen2.5:3b`).
+Requirements: Node.js 20.19+ or 22.12+ and npm.
 
 ```sh
 npm install
 cp .env.example .env.local
-# Set Supabase values below; Ollama defaults work for a local installation.
+# Set the client-safe Supabase URL and publishable key in .env.local.
 npm run dev
 ```
 
-`npm run dev` starts the Vite app and the loopback-only local AI API. The app does not expose the Ollama port to the browser; it calls the local API through Vite's `/api` proxy. Keep Ollama bound to the local machine.
+`npm run dev` runs Vite and a loopback-only API server. The browser posts to `/api/overlap/matches`; Vite proxies that path to the local server, which invokes the same handler used by Vercel. The API server needs Supabase and AI secrets only to perform semantic matching. Ordinary app sign-in and rule-based matching use Supabase client configuration.
 
-Required environment variables:
-
-- `VITE_SUPABASE_URL` — Supabase project URL.
-- `VITE_SUPABASE_ANON_KEY` — publishable/anon key. Never put a service-role key in a `VITE_` variable.
-- `OLLAMA_URL` — local Ollama HTTP endpoint; only localhost/loopback URLs are accepted.
-- `OLLAMA_MODEL` — local model tag; defaults to `qwen2.5:3b`.
-- `LOCAL_AI_PORT` — loopback API port; defaults to `3001`.
-
-The app intentionally shows a configuration notice and does not show fabricated records when these values are absent.
-
-## Supabase setup
-
-1. Create or select a Supabase project and configure the allowed local/deployed redirect URLs in Auth settings.
-2. Create official accounts through an authorized Supabase Auth administrator process; public signup is not implemented. No initial credentials are supplied or generated.
-3. Review migrations `202610240001` through `202610240005` against your project, then apply them in order with the Supabase CLI (`supabase link`, `supabase db push`). Migration 003 adds nullable next-action description and expected-disposal fields. Migrations 004–005 add a bureau-scoped `bureau_officer` role for other Bureaus/Cells/Regional Offices.
-4. Add reviewed Bureau/Cell rows and provision each user's `profiles` row using a trusted administrator SQL/editor process. Set roles only from `aicte_official`, `pgrc_officer`, `rb_officer`, `bureau_officer`, `administrator`. PGRC/RB/generic Bureau roles require a matching bureau UUID. `can_manage_bureau` is false by default for new profiles; set it true only for an explicitly authorized Bureau/Cell manager. The migration does not create institutions, cases, accounts, or bureau rows.
-5. Apply `.env.local` values and restart Vite. Confirm data access using accounts with each intended role before deployment.
-
-The migrations are additive and create tables, indexes, functions, triggers, policies, profile scope, the generic Bureau role, and nullable complaint fields. The role-scope migration does not update existing profile rows or drop application records. Existing PGRC/RB profiles have a null new permission and retain their former Bureau-wide scope; a trusted administrator may explicitly set the flag true for a manager or false for an individual officer. New profiles default to individual-officer scope. The migration restricts complaint changes to audited workflow triggers and adds the `assigned_to` action-history field. Review it before applying to a project with pre-existing objects. Storage buckets are not created; document table entries alone do not grant access to a Storage object. Configure a private bucket and matching Storage policies before enabling document upload/download.
-
-## Commands
+## Checks
 
 ```sh
-npm run dev        # local development
-npm test           # local website-help assistant tests
-npm run typecheck  # TypeScript check
-npm run build      # typecheck + production bundle
-npm run preview    # preview production bundle
+npm test
+npm run typecheck
+npm run build
 ```
 
-## Security notes and limitations
+There is no lint script configured in `package.json`.
 
-- Supabase RLS is the authorization boundary. Client UI checks only hide irrelevant navigation. Do not use the service-role key in this client.
-- Auth roles/profile rows must be provisioned by an administrator. This repo does not include a privileged provisioning server/Edge Function, account deactivation UI, or public signup.
-- The current schema models one handling bureau and one assigned officer per complaint. Other Bureau/Cell/Regional Office users can use `bureau_officer` and be scoped to a configured bureau; multi-bureau ownership and historical multi-assignment memberships need a separate reviewed extension.
-- Overlap suggestions can be generated on request from accessible cross-Bureau cases sharing an institution record. This is identity evidence only, not text-similarity or a claim that the complaints are duplicates; human review is required.
-- Coordination request creation and responses are wired for authorized participants. Deadline alerts use recorded next-action or expected-disposal dates; no SLA duration is assumed. Alerts are dashboard-derived, not email/SMS or a persistent notification center. Supporting-document table metadata exists, but a private Storage bucket/policies and upload/download UI are not configured. There is no historical backlog snapshot or full audit browser.
-- Local case summaries are generated on demand and are not written to Supabase. Prompt content is treated as untrusted data; summaries are decision support and may omit or misstate information, so officials must verify the source record. No external AI provider is called.
-- Local Ollama is available only when this local backend and the Ollama service are running on the same machine. Static deployments do not include this local backend.
-- No connected Supabase project or role-specific accounts were available, so the migrations have not been applied and live authentication, RLS, and workflow writes could not be verified here. The role and scope helpers have unit coverage.
+## Setup and deployment
 
-## Deployment
+See [MANUAL_SETUP.md](MANUAL_SETUP.md), [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), and [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md). Database migrations are in `supabase/migrations/` and must be reviewed/applied to the intended Supabase project in order. No production migration, seed, deployment, or account provisioning is performed by this repository's local development command.
 
-Build with `npm run build` and deploy the `dist/` directory to a static host configured to serve `index.html` for client-side routes. Supply only the Supabase URL and publishable anon key through the host's build environment. Configure Auth redirect URLs and enforce HTTPS. Review RLS policies and test all roles in the target Supabase project before real records are entered.
+## Security and AI matching
+
+See [docs/SECURITY.md](docs/SECURITY.md) and [docs/AI_MATCHING.md](docs/AI_MATCHING.md). Semantic matching sends subject, category, and description for uncached complaints to OpenAI only when server secrets, the administrator approval flag, and the user's per-run disclosure are all present. Pattern redaction is best effort, not anonymization; the data owner must approve the processor and policy before enabling this feature.
