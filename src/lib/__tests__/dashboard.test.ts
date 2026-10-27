@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { casesForDashboard, dashboardKind, filterReportCases, isApproaching, isPastNextAction, summarizeReportCases } from '../dashboard';
+import { buildDashboardCards, casesForDashboard, dashboardKind, filterReportCases, isApproaching, isPastNextAction, summarizeReportCases } from '../dashboard';
 import type { CaseRow } from '../supabase';
 
 const cases = [
@@ -46,5 +46,11 @@ describe('role dashboard scope',()=>{
     ];
     expect(summarizeReportCases(rows,new Date('2026-01-05T00:00:00.000Z'))).toEqual({total:3,pending:1,underProcess:1,disposed:1,overdue:2,disposalRate:33});
     expect(summarizeReportCases([]).disposalRate).toBeNull();
+  });
+  it('uses the database relationship summary for dashboard counts and affected cases',()=>{
+    const summary={pending_count:2,case_ids:['1','3'],by_bureau:[],recent:[]};
+    const cards=buildDashboardCards('administrator',cases,summary,[],[],[],{id:'admin',is_admin:true});
+    expect(cards.find(([label])=>label==='Potential relationships')?.[1]).toBe(2);
+    expect(cards.find(([label])=>label==='Cases requiring attention')?.[1]).toBe(2);
   });
 });

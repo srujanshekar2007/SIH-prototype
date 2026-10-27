@@ -45,24 +45,30 @@ export async function fetchRelationshipReviews(client: SupabaseClient) {
   };
 }
 
-function isMissingAssignmentSchema(error: any) {
-  const message = [error?.message, error?.details, error?.hint].filter(Boolean).join(' ').toLowerCase();
-  return (message.includes('assigned_to') || message.includes('case_actions_assigned_to_fkey')) &&
-    (['42703', 'PGRST200', 'PGRST204'].includes(error?.code) || /column|relationship|foreign key|schema cache|not found|does not exist/.test(message));
+export type DashboardRelationshipSummary = {
+  pending_count: number;
+  case_ids: string[];
+  by_bureau: { name: string; value: number }[];
+  recent: any[];
+};
+
+export async function fetchDashboardRelationshipSummary(client: SupabaseClient) {
+  const { data, error } = await client.rpc('dashboard_relationship_summary');
+  if (error) return { data: null as DashboardRelationshipSummary | null, error };
+  const value = (data || {}) as Partial<DashboardRelationshipSummary>;
+  return {
+    data: {
+      pending_count: Number(value.pending_count) || 0,
+      case_ids: Array.isArray(value.case_ids) ? value.case_ids : [],
+      by_bureau: Array.isArray(value.by_bureau) ? value.by_bureau : [],
+      recent: Array.isArray(value.recent) ? value.recent : [],
+    },
+    error: null as any,
+  };
 }
 
 export async function fetchCaseActions(client: SupabaseClient) {
-  const query = (columns: string) => fetchAllPages<any>((from, to) => client.from('case_actions')
-    .select(columns).order('created_at', { ascending: false }).range(from, to));
-  const current = await query('id,complaint_id,action_type,remarks,status_before,status_after,assigned_to,assigned_to_profile:profiles!case_actions_assigned_to_fkey(display_name),actor:profiles!case_actions_actor_id_fkey(display_name),created_at,actor_id');
-  if (!isMissingAssignmentSchema(current.error)) return current;
-
-  const withoutJoin = await query('id,complaint_id,action_type,remarks,status_before,status_after,assigned_to,actor:profiles!case_actions_actor_id_fkey(display_name),created_at,actor_id');
-  if (!isMissingAssignmentSchema(withoutJoin.error)) return withoutJoin;
-
-  const baseline = await query('id,complaint_id,action_type,remarks,status_before,status_after,actor:profiles!case_actions_actor_id_fkey(display_name),created_at,actor_id');
-  return baseline.error ? baseline : {
-    ...baseline,
-    data: (baseline.data || []).map((action: any) => ({ ...action, assigned_to: null, assigned_to_profile: null })),
-  };
+  return fetchAllPages<any>((from, to) => client.from('case_actions')
+    .select('id,complaint_id,action_type,remarks,status_before,status_after,actor:profiles!case_actions_actor_id_fkey(display_name),created_at,actor_id')
+    .order('created_at', { ascending: false }).range(from, to));
 }
