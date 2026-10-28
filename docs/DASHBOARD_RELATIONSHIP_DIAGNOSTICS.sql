@@ -3,11 +3,9 @@
 -- the id of an active profile whose dashboard is experiencing the timeout.
 -- No complaint or relationship rows are modified by these queries.
 
--- 1) Confirm the relevant migrations are recorded as applied.
-select version, name
-from supabase_migrations.schema_migrations
-where version in ('202610270002', '202610270003')
-order by version;
+-- 1) Do not assume a Supabase migration ledger exists in this project. Check
+-- the ledger relation safely; NULL means it is absent/unavailable.
+select to_regclass('supabase_migrations.schema_migrations') as migration_ledger;
 
 -- 2) Inspect the deployed function definition and supporting indexes.
 select to_regprocedure('public.dashboard_relationship_summary()') as resolved_function,

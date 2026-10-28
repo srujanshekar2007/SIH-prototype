@@ -20,13 +20,13 @@ No live migration was applied, no Vercel settings were inspected via authenticat
 
 ## Dashboard relationship summary is missing
 
-If the dashboard reports `PGRST202` or says `public.dashboard_relationship_summary()` is missing from the schema cache, check the intended Supabase project's migration history first. The function is created by `supabase/migrations/202610270002_action_schema_and_relationship_summary.sql`; apply pending migrations in lexical order using the authorized database change process. If that migration is already applied and the function definition exists, refresh PostgREST's schema cache in the Supabase SQL Editor:
+If the dashboard reports `PGRST202` or says `public.dashboard_relationship_summary()` is missing from the schema cache, inspect the function directly; some projects do not expose a `supabase_migrations.schema_migrations` ledger. The additive repair at `supabase/migrations/202610280001_dashboard_relationship_rpcs.sql` installs the exact summary RPC expected by the frontend and adds a paginated relationship-review RPC. Its profile scope reads the optional `can_manage_bureau` flag compatibly when older project schemas do not have that column. Review and apply it to the intended project through the authorized database change process. It also sends PostgREST a schema reload notification after creating the functions.
 
 ```sql
 select to_regprocedure('public.dashboard_relationship_summary()');
 ```
 
-If this returns `NULL`, the function is absent from the database; apply the migration rather than only reloading the cache. If it returns `dashboard_relationship_summary()` and the migration is recorded, run:
+If this returns `NULL`, the function is absent. If it returns `dashboard_relationship_summary()` but PostgREST still reports PGRST202, run:
 
 ```sql
 NOTIFY pgrst, 'reload schema';

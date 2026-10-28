@@ -1,12 +1,12 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, AlertTriangle, ArrowDownLeft, ArrowLeftRight, BarChart3, Bell, Building2, Check, ChevronDown, ClipboardList, Clock3, FileText, Filter, Gauge, LogOut, Menu, MessageSquare, Mic, Moon, Plus, RefreshCw, Search, Send, ShieldCheck, Sparkles, Sun, Users, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { fetchAllPages, fetchBureauTransferCounts, fetchCaseActions, fetchComplaintCases, fetchDashboardRelationshipSummary, fetchRelationshipReviews, friendlyError, isSupabaseConfigured, supabase, type CaseRow, type DashboardRelationshipSummary } from './lib/supabase';
+import { fetchAllPages, fetchBureauTransferCounts, fetchCaseActions, fetchComplaintCases, fetchDashboardRelationshipSummary, fetchRelationshipReviewPage, friendlyError, isSupabaseConfigured, supabase, type CaseRow, type DashboardRelationshipSummary } from './lib/supabase';
 import { buildDashboardCards, casesForDashboard, dashboardKind, filterReportCases, isPastNextAction, makeChartData, summarizeReportCases } from './lib/dashboard';
 import { fetchUserProfile } from './lib/profile';
 import { recordRelationshipReview } from './lib/relationship-review';
 import { readAiMatchesResponse } from './lib/ai-matches-response';
-import { MINIMUM_COSINE_OPTIONS, minimumCosineRequestThreshold, parseMinimumCosineSelection, passesMinimumCosineFilter, type MinimumCosineSelection } from './lib/overlap-threshold';
+import { MINIMUM_COSINE_OPTIONS, minimumCosineRequestThreshold, parseMinimumCosineSelection, type MinimumCosineSelection } from './lib/overlap-threshold';
 import { faq } from './lib/faq';
 import { clearSessionStartedAt, getSessionStartedAt, getSessionTimestampKey, isSessionAgeExpired } from './lib/session-age';
 import ProfileSecurity, { PasswordRecovery } from './components/ProfileSecurity';
@@ -21,8 +21,10 @@ const missingPlanningColumns=(error:any)=>{const message=String(error?.message||
 export default function App(){
  const [theme,setTheme]=useState<'light'|'dark'>(()=>{try{const stored=localStorage.getItem('aicte-theme');if(stored==='dark'||stored==='light')return stored}catch{/* Use the preloaded document theme when storage is unavailable. */}return document.documentElement.dataset.theme==='dark'?'dark':'light'});
  const [page,setPage]=useState<Page>('Dashboard'),[mobileNav,setMobileNav]=useState(false),[session,setSession]=useState<any>(null),[profile,setProfile]=useState<any>(null),[profileLoading,setProfileLoading]=useState(true),[profileError,setProfileError]=useState(''),[profileRetry,setProfileRetry]=useState(0),[lastUpdated,setLastUpdated]=useState<Date|null>(null),[coordination,setCoordination]=useState<any[]>([]),[openCoordination,setOpenCoordination]=useState<any[]>([]),[bureaus,setBureaus]=useState<any[]>([]),[transfers,setTransfers]=useState<any[]>([]),[transferCounts,setTransferCounts]=useState<{inBureau:number;outBureau:number}|null>(null),[audits,setAudits]=useState<any[]>([]),[officers,setOfficers]=useState<any[]>([]),[authLoading,setAuthLoading]=useState(true),[passwordRecovery,setPasswordRecovery]=useState(false),[loading,setLoading]=useState(false),[pageDataLoading,setPageDataLoading]=useState(false),[queueLoading,setQueueLoading]=useState(false),[queueError,setQueueError]=useState(''),[relationshipSummaryError,setRelationshipSummaryError]=useState(''),[relationshipSummaryLoading,setRelationshipSummaryLoading]=useState(false),[error,setError]=useState(''),[complaintError,setComplaintError]=useState(''),[cases,setCases]=useState<CaseRow[]>([]),[actions,setActions]=useState<any[]>([]),[institutions,setInstitutions]=useState<any[]>([]),[overlaps,setOverlaps]=useState<any[]>([]),[relationshipSummary,setRelationshipSummary]=useState<DashboardRelationshipSummary|null>(null),[search,setSearch]=useState(''),[filter,setFilter]=useState('All statuses'),[chatOpen,setChatOpen]=useState(false),[chatInput,setChatInput]=useState(''),[messages,setMessages]=useState<{from:'assistant'|'user';text:string}[]>([{from:'assistant',text:'Hello! I can help you navigate this complaint monitoring website. What would you like to know?'}]),[toast,setToast]=useState(''),[selectedCase,setSelectedCase]=useState<CaseRow|null>(null),[selectedInstitution,setSelectedInstitution]=useState<any|null>(null),[modal,setModal]=useState('');
+ const [overlapTotalCount,setOverlapTotalCount]=useState<number|null>(null),[queuePage,setQueuePage]=useState(1),[queueStatusFilter,setQueueStatusFilter]=useState<'all'|'pending'|'confirmed'|'rejected'>('all'),[queueBureauFilter,setQueueBureauFilter]=useState('all'),[queueInstitutionFilter,setQueueInstitutionFilter]=useState('all'),[queueMinimumSimilarity,setQueueMinimumSimilarity]=useState<MinimumCosineSelection>('all');
+ const queuePageSize=25;
  const sessionStartedAtRef=useRef<number|null>(null),sessionRef=useRef<any>(null),expiredSignOutRef=useRef(false),expireSessionRef=useRef<()=>void>(()=>{});
- const coreLoadInFlightRef=useRef(false),queueLoadInFlightRef=useRef(false),relationshipSummaryRequestRef=useRef<Promise<any>|null>(null),relationshipSummaryRefreshRef=useRef<Promise<void>|null>(null),loadedPageDataRef=useRef(new Map<string,number>()),pendingPageDataRef=useRef(new Map<string,Promise<void>>());
+ const coreLoadInFlightRef=useRef(false),queueLoadSequenceRef=useRef(0),queueLoadInFlightRef=useRef<{key:string;promise:Promise<void>}|null>(null),relationshipSummaryRequestRef=useRef<Promise<any>|null>(null),relationshipSummaryRefreshRef=useRef<Promise<void>|null>(null),loadedPageDataRef=useRef(new Map<string,number>()),pendingPageDataRef=useRef(new Map<string,Promise<void>>());
  sessionRef.current=session;
  useEffect(()=>{document.documentElement.dataset.theme=theme;try{localStorage.setItem('aicte-theme',theme)}catch{/* Theme remains active for this session when storage is unavailable. */}},[theme]);
  useEffect(()=>{
@@ -42,7 +44,7 @@ export default function App(){
   if(!supabase){setAuthLoading(false);return}
   let mounted=true,authEventReceived=false;
   const storage=(()=>{try{return window.sessionStorage}catch{return {getItem:()=>null,setItem:()=>{},removeItem:()=>{}}}})();
-  const clearProtectedData=()=>{setProfile(null);setProfileError('');setProfileLoading(false);setComplaintError('');setCases([]);setActions([]);setInstitutions([]);setOverlaps([]);setRelationshipSummary(null);setRelationshipSummaryError('');setRelationshipSummaryLoading(false);setCoordination([]);setOpenCoordination([]);setBureaus([]);setTransfers([]);setTransferCounts(null);setAudits([]);setOfficers([]);setLastUpdated(null);loadedPageDataRef.current.clear();pendingPageDataRef.current.clear();coreLoadInFlightRef.current=false;queueLoadInFlightRef.current=false;relationshipSummaryRequestRef.current=null;relationshipSummaryRefreshRef.current=null};
+  const clearProtectedData=()=>{setProfile(null);setProfileError('');setProfileLoading(false);setComplaintError('');setCases([]);setActions([]);setInstitutions([]);setOverlaps([]);setOverlapTotalCount(null);setQueueError('');setQueueLoading(false);setRelationshipSummary(null);setRelationshipSummaryError('');setRelationshipSummaryLoading(false);setCoordination([]);setOpenCoordination([]);setBureaus([]);setTransfers([]);setTransferCounts(null);setAudits([]);setOfficers([]);setLastUpdated(null);loadedPageDataRef.current.clear();pendingPageDataRef.current.clear();coreLoadInFlightRef.current=false;queueLoadSequenceRef.current+=1;queueLoadInFlightRef.current=null;relationshipSummaryRequestRef.current=null;relationshipSummaryRefreshRef.current=null};
   const expireSession=()=>{
    if(expiredSignOutRef.current)return;
    expiredSignOutRef.current=true;
@@ -170,22 +172,37 @@ export default function App(){
  const retryRelationshipSummary=async()=>{
   await refreshRelationshipSummary();
  };
- const loadRelationshipQueue=async()=>{
-  if(!supabase||!session||!profile?.active||queueLoadInFlightRef.current)return;
-  queueLoadInFlightRef.current=true;
-  setQueueLoading(true);
-  setQueueError('');
-  try{
-   const result=await fetchRelationshipReviews(supabase);
-   if(result.error)setQueueError(friendlyError(result.error));
-   else setOverlaps(result.data||[]);
-  }catch(reason){setQueueError(friendlyError(reason))}
-  finally{setQueueLoading(false);queueLoadInFlightRef.current=false}
+ const loadRelationshipQueue=()=>{
+  if(!supabase||!session||!profile?.active)return Promise.resolve();
+  const client=supabase;
+  const request={
+   page:queuePage,
+   pageSize:queuePageSize,
+   status:queueStatusFilter==='all'?null:queueStatusFilter,
+   bureauId:queueBureauFilter==='all'?null:queueBureauFilter,
+   institutionId:queueInstitutionFilter==='all'?null:queueInstitutionFilter,
+   minimumSimilarity:queueMinimumSimilarity==='all'?null:Number(queueMinimumSimilarity),
+  };
+  const requestKey=JSON.stringify([session.user.id,profile.role,profile.bureau_id,profile.is_admin,request]);
+  if(queueLoadInFlightRef.current?.key===requestKey)return queueLoadInFlightRef.current.promise;
+  const requestId=++queueLoadSequenceRef.current;
+  setQueueLoading(true);setQueueError('');setOverlaps([]);setOverlapTotalCount(null);
+  const task=Promise.resolve().then(async()=>{
+   try{
+    const result=await fetchRelationshipReviewPage(client,request);
+    if(requestId!==queueLoadSequenceRef.current)return;
+    if(result.error){setQueueError(friendlyError(result.error));setOverlaps([]);setOverlapTotalCount(null)}
+    else if(result.data){setOverlaps(result.data.rows);setOverlapTotalCount(result.data.totalCount)}
+   }catch(reason){if(requestId===queueLoadSequenceRef.current){setQueueError(friendlyError(reason));setOverlaps([]);setOverlapTotalCount(null)}}
+   finally{if(requestId===queueLoadSequenceRef.current)setQueueLoading(false);if(queueLoadInFlightRef.current?.promise===task)queueLoadInFlightRef.current=null}
+  });
+  queueLoadInFlightRef.current={key:requestKey,promise:task};
+  return task;
  };
  const refreshOverlapPage=async()=>{await load();await loadPageData(page,true);if(page==='Overlap Monitoring')await loadRelationshipQueue()};
  const openComplaintModal=async()=>{await loadPageData('Complaint Registry');setModal('case')};
  useEffect(()=>{void loadPageData(page)},[page,session,profile]);
- useEffect(()=>{if(page==='Overlap Monitoring')void loadRelationshipQueue()},[page,session,profile]);
+ useEffect(()=>{if(page==='Overlap Monitoring')void loadRelationshipQueue()},[page,session,profile,queuePage,queueStatusFilter,queueBureauFilter,queueInstitutionFilter,queueMinimumSimilarity]);
  useEffect(()=>{void load()},[session,profile]);
  useEffect(()=>{if(!session||!profile?.active||page!=='Dashboard')return;const timer=window.setInterval(()=>{if(document.visibilityState==='visible')void load()},5*60_000);return()=>window.clearInterval(timer)},[session,profile,page]);
  const deferredSearch=useDeferredValue(search.trim().toLowerCase());const filtered=useMemo(()=>cases.filter(c=>(filter==='All statuses'||(filter==='Overdue'?isPastNextAction(c):filter==='Unassigned'?!c.assigned_officer_id:c.status.toLowerCase()===filter.toLowerCase()))&&(!deferredSearch||[c.case_number,c.institutions?.name,c.institutions?.internal_id,c.institutions?.aicte_permanent_id,c.institutions?.region,c.category,c.bureaus?.name].some(x=>x?.toLowerCase().includes(deferredSearch)))),[cases,filter,deferredSearch]);
@@ -211,7 +228,7 @@ export default function App(){
  {page==='Dashboard'&&<Dashboard kind={kind} bureauName={bureauName} profile={profile} userId={session.user.id} cards={cards} chartData={chartData} bureauData={bureauData} cases={dashboardCases} overlaps={pendingOverlaps} relationshipSummary={relationshipSummary} relationshipSummaryError={relationshipSummaryError} relationshipSummaryLoading={relationshipSummaryLoading} onRetryRelationshipSummary={retryRelationshipSummary} actions={actions} coordination={openCoordination} audits={audits} lastUpdated={lastUpdated} onRefresh={load} go={go} openMetric={openMetric} openCase={openCase}/ >}
  {page==='Complaint Registry'&&<Registry rows={filtered} search={search} setSearch={setSearch} filter={filter} setFilter={setFilter} onSelect={(c:CaseRow)=>{setSelectedCase(c)}} onNew={()=>void openComplaintModal()} allowCreate={kind==='administrator'||kind==='bureau'}/>}
  {page==='Institutions'&&<Institutions rows={institutions} cases={cases} search={search} setSearch={setSearch} onSelect={setSelectedInstitution}/>}
- {page==='Overlap Monitoring'&&<Overlap rows={overlaps} cases={cases} loading={queueLoading} queueError={queueError} onReview={reviewOverlap} onRefresh={refreshOverlapPage} canReview={kind!=='oversight'} canGenerate={kind!=='oversight'} openCase={openCase}/>}
+ {page==='Overlap Monitoring'&&<Overlap rows={overlaps} totalCount={overlapTotalCount} cases={cases} loading={queueLoading} queueError={queueError} onReview={reviewOverlap} onRefresh={refreshOverlapPage} onRetryQueue={loadRelationshipQueue} queuePage={queuePage} setQueuePage={setQueuePage} queuePageSize={queuePageSize} statusFilter={queueStatusFilter} setStatusFilter={setQueueStatusFilter} bureauFilter={queueBureauFilter} setBureauFilter={setQueueBureauFilter} institutionFilter={queueInstitutionFilter} setInstitutionFilter={setQueueInstitutionFilter} minimumSimilarity={queueMinimumSimilarity} setMinimumSimilarity={setQueueMinimumSimilarity} canReview={kind!=='oversight'} canGenerate={kind!=='oversight'} openCase={openCase}/>}
  {page==='Workflow & History'&&<Workflow rows={cases} actions={actions} openCase={openCase}/>}
  {page==='Transfers & Escalations'&&<WorkQueue rows={cases} transfers={transfers} profile={profile} kind={kind} type="transfer" allowAction={kind!=='oversight'} openCase={openCase} onAction={(c:CaseRow)=>{setSelectedCase(c);setModal('transfer')}}/>}
  {page==='Alerts & Deadlines'&&<Alerts rows={cases} coordination={openCoordination} overlaps={pendingOverlaps} goCase={openCase}/>}
@@ -272,25 +289,15 @@ function Registry({rows,search,setSearch,filter,setFilter,onSelect,onNew,allowCr
  <div className="results-line">{visible.length} authorized record{visible.length===1?'':'s'}{(search||filter!=='All statuses'||fromDate||toDate||bureau!=='All bureaus'||region!=='All regions'||category!=='All categories')&&<button className="text-button" onClick={clear}>Clear filters</button>}</div>{visible.length?<div className="table-wrap"><table><thead><tr><th>CASE ID</th><th>INSTITUTION</th><th>CATEGORY</th><th>BUREAU / CELL</th><th>STATUS</th><th>RECEIVED</th><th>NEXT ACTION</th><th>EXPECTED DISPOSAL</th></tr></thead><tbody>{visible.map((c:CaseRow)=><tr key={c.id} onClick={()=>onSelect(c)}><td><b className="link-text">{c.case_number}</b></td><td>{c.institutions?.name||'—'}<small className="sub-cell">{c.institutions?.aicte_permanent_id||c.institutions?.internal_id||''}</small></td><td>{c.category||'—'}</td><td>{c.bureaus?.name||'Unassigned'}</td><td><Status status={c.status}/></td><td>{safeDate(c.received_at)}</td><td>{safeDate(c.next_action_at)}</td><td>{safeDate(c.expected_disposal_at)}</td></tr>)}</tbody></table></div>:<Empty title="No matching complaint records" text="Try clearing filters or changing your search criteria."/>}</div>}
 
 function Institutions({rows,cases,search,setSearch,onSelect}:any){const filtered=rows.filter((i:any)=>`${i.name} ${i.internal_id||''} ${i.aicte_permanent_id||''} ${i.region||''} ${i.address||''}`.toLowerCase().includes(search.toLowerCase()));return <div className="panel"><div className="toolbar"><div className="searchbox"><Search size={16}/><input aria-label="Search institutions" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Institution, AICTE Permanent ID, region…"/></div><div className="results-line">{filtered.length} institutions</div></div>{filtered.length?<div className="institution-grid">{filtered.map((i:any)=><button className="institution-card" key={i.id} onClick={()=>onSelect(i)}><div className="institution-icon"><Building2 size={20}/></div><div><h3>{i.name}</h3><p>{i.region||'Region not recorded'}</p><small>AICTE ID: {i.aicte_permanent_id||'Not recorded'} · Internal ID: {i.internal_id||'Not provided'}</small></div><span className="case-count">{cases.filter((c:CaseRow)=>c.institution_id===i.id).length}<small>cases</small></span></button>)}</div>:<Empty title="No institutions found" text="Institution records are managed in your configured Supabase project."/>}</div>}
-function Overlap({rows,cases,loading,queueError,onReview,onRefresh,openCase,canReview,canGenerate}:any){
+function Overlap({rows,totalCount,cases,loading,queueError,onReview,onRefresh,onRetryQueue,openCase,canReview,canGenerate,queuePage,setQueuePage,queuePageSize,statusFilter,setStatusFilter,bureauFilter,setBureauFilter,institutionFilter,setInstitutionFilter,minimumSimilarity,setMinimumSimilarity}:any){
  const [ruleBusy,setRuleBusy]=useState(false),[aiBusy,setAiBusy]=useState(false),[message,setMessage]=useState(''),[externalProcessingApproved,setExternalProcessingApproved]=useState(false);
- const [statusFilter,setStatusFilter]=useState('all'),[bureauFilter,setBureauFilter]=useState('all'),[institutionFilter,setInstitutionFilter]=useState('all'),[minimumSimilarity,setMinimumSimilarity]=useState<MinimumCosineSelection>('all'),[queuePage,setQueuePage]=useState(1);
- const queuePageSize=25;
- useEffect(()=>setQueuePage(1),[statusFilter,bureauFilter,institutionFilter,minimumSimilarity]);
  const caseById=new Map<string,CaseRow>(cases.map((c:CaseRow)=>[c.id,c]));
  const bureaus=Array.from(new Map(cases.filter((c:CaseRow)=>c.bureau_id&&c.bureaus?.name).map((c:CaseRow)=>[c.bureau_id,c.bureaus!.name])).entries());
  const institutions=Array.from(new Map(cases.filter((c:CaseRow)=>c.institution_id&&c.institutions?.name).map((c:CaseRow)=>[c.institution_id,c.institutions!.name])).entries());
- const filtered=rows.filter((r:any)=>{
-  const a=caseById.get(r.source_case_id),b=caseById.get(r.target_case_id);
-  const statusOk=statusFilter==='all'||r.review_status===statusFilter;
-  const bureauOk=bureauFilter==='all'||a?.bureau_id===bureauFilter||b?.bureau_id===bureauFilter;
-  const institutionOk=institutionFilter==='all'||a?.institution_id===institutionFilter&&b?.institution_id===institutionFilter;
-  const scoreOk=passesMinimumCosineFilter(r.semantic_similarity,minimumSimilarity);
-  return statusOk&&bureauOk&&institutionOk&&scoreOk;
- });
- const pageCount=Math.max(1,Math.ceil(filtered.length/queuePageSize));
+ const pageCount=Math.max(1,Math.ceil((totalCount||0)/queuePageSize));
  const safeQueuePage=Math.min(queuePage,pageCount);
- const pageRows=filtered.slice((safeQueuePage-1)*queuePageSize,safeQueuePage*queuePageSize);
+ const pageRows=rows;
+ useEffect(()=>{if(totalCount!==null&&queuePage>pageCount)setQueuePage(pageCount)},[totalCount,queuePage,pageCount,setQueuePage]);
  const suggest=async()=>{if(!supabase)return;setRuleBusy(true);setMessage('');const {data,error}=await supabase.rpc('suggest_same_institution_relationships');setRuleBusy(false);if(error)setMessage(friendlyError(error));else{setMessage(`${data||0} new rule-based cross-bureau suggestion(s) added. Same institution is identity evidence, not proof of related complaints.`);await onRefresh()}};
  const generateAiMatches=async()=>{
   if(!supabase)return;
@@ -317,15 +324,15 @@ function Overlap({rows,cases,loading,queueError,onReview,onRefresh,openCase,canR
   <div className="notice info"><Sparkles size={18}/><div><b>Potential relationship · official review required</b><span>Same institution and semantic similarity are evidence for review only. No case is merged, closed, or altered automatically.</span></div></div>
   <div className="panel overlap-panel">
    {loading&&<div className="loading-strip"><div className="spinner small"/>Loading authorized relationship reviews…</div>}
-   {queueError&&<div className="notice danger" role="alert"><AlertTriangle size={18}/><div><b>Relationship queue could not be loaded</b><span>{queueError}</span></div><button className="button subtle" onClick={()=>void onRefresh()}>Retry</button></div>}
-   <div className="panel-head"><div><h2>Relationship review queue</h2><p>{filtered.length} of {rows.length} relationship record{rows.length===1?'':'s'}</p></div><span className="tag">Pending · confirmed · rejected</span></div>
+   {queueError&&<div className="notice danger" role="alert"><AlertTriangle size={18}/><div><b>Relationship queue could not be loaded</b><span>{queueError}</span></div><button className="button subtle" onClick={()=>void onRetryQueue()}>Retry</button></div>}
+   <div className="panel-head"><div><h2>Relationship review queue</h2><p>{totalCount===null?'—':totalCount} authorized relationship record{totalCount===1?'':'s'}</p></div><span className="tag">Pending · confirmed · rejected</span></div>
    <div className="overlap-filters">
-    <label>Status<select value={statusFilter} onChange={(event)=>setStatusFilter(event.target.value)}><option value="all">All statuses</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="rejected">Rejected</option></select></label>
-    <label>Bureau / Cell<select value={bureauFilter} onChange={(event)=>setBureauFilter(event.target.value)}><option value="all">All accessible bureaus</option>{bureaus.map(([id,name]:any)=><option key={id} value={id}>{name}</option>)}</select></label>
-    <label>Institution<select value={institutionFilter} onChange={(event)=>setInstitutionFilter(event.target.value)}><option value="all">All institutions</option>{institutions.map(([id,name]:any)=><option key={id} value={id}>{name}</option>)}</select></label>
-    <label>Minimum cosine score<select value={minimumSimilarity} onChange={(event)=>setMinimumSimilarity(parseMinimumCosineSelection(event.target.value))}>{MINIMUM_COSINE_OPTIONS.map((option)=><option key={option.value} value={option.value}>{option.label}</option>)}</select><small>Filters this queue immediately. All scores includes rule-based rows without embeddings; generating AI matches uses the server-configured threshold.</small></label>
+    <label>Status<select value={statusFilter} onChange={(event)=>{setStatusFilter(event.target.value);setQueuePage(1)}}><option value="all">All statuses</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="rejected">Rejected</option></select></label>
+    <label>Bureau / Cell<select value={bureauFilter} onChange={(event)=>{setBureauFilter(event.target.value);setQueuePage(1)}}><option value="all">All accessible bureaus</option>{bureaus.map(([id,name]:any)=><option key={id} value={id}>{name}</option>)}</select></label>
+    <label>Institution<select value={institutionFilter} onChange={(event)=>{setInstitutionFilter(event.target.value);setQueuePage(1)}}><option value="all">All institutions</option>{institutions.map(([id,name]:any)=><option key={id} value={id}>{name}</option>)}</select></label>
+    <label>Minimum cosine score<select value={minimumSimilarity} onChange={(event)=>{setMinimumSimilarity(parseMinimumCosineSelection(event.target.value));setQueuePage(1)}}>{MINIMUM_COSINE_OPTIONS.map((option)=><option key={option.value} value={option.value}>{option.label}</option>)}</select><small>Filters this queue on the server. All scores includes rule-based rows without embeddings; generating AI matches uses the server-configured threshold.</small></label>
    </div>
-   {pageRows.length?pageRows.map((r:any)=>{
+   {loading?null:pageRows.length?pageRows.map((r:any)=>{
     const a=caseById.get(r.source_case_id),b=caseById.get(r.target_case_id);
     const excerpt=(value:string|null|undefined)=>value?.trim()?`${value.trim().slice(0,240)}${value.trim().length>240?'…':''}`:'No complaint description recorded.';
     const statusLabel=r.review_status==='confirmed'?'Confirmed relationship':r.review_status==='rejected'?'Rejected suggestion':'Pending review';
@@ -338,7 +345,7 @@ function Overlap({rows,cases,loading,queueError,onReview,onRefresh,openCase,canR
      {canReview&&r.review_status==='pending'&&<div className="overlap-actions"><button className="button primary" onClick={()=>onReview(r.id,'confirmed')}><Check size={15}/> Confirm relation</button><button className="button subtle" onClick={()=>onReview(r.id,'rejected')}>Mark unrelated</button></div>}
     </article>
    }):<Empty title={queueError?'Relationship reviews unavailable':'No relationships match these filters'} text={queueError?'Retry loading the authorized relationship queue.':'Try widening the selected bureau, institution, status, or similarity score.'}/>}
-   {filtered.length>queuePageSize&&<div className="queue-pagination"><span>Showing {(safeQueuePage-1)*queuePageSize+1}–{Math.min(safeQueuePage*queuePageSize,filtered.length)} of {filtered.length}</span><div><button className="button subtle" disabled={safeQueuePage<=1} onClick={()=>setQueuePage(safeQueuePage-1)}>Previous</button><span>Page {safeQueuePage} of {pageCount}</span><button className="button subtle" disabled={safeQueuePage>=pageCount} onClick={()=>setQueuePage(safeQueuePage+1)}>Next</button></div></div>}
+   {(totalCount||0)>queuePageSize&&<div className="queue-pagination"><span>Showing {(safeQueuePage-1)*queuePageSize+1}–{Math.min(safeQueuePage*queuePageSize,totalCount)} of {totalCount}</span><div><button className="button subtle" disabled={safeQueuePage<=1||loading} onClick={()=>setQueuePage(safeQueuePage-1)}>Previous</button><span>Page {safeQueuePage} of {pageCount}</span><button className="button subtle" disabled={safeQueuePage>=pageCount||loading} onClick={()=>setQueuePage(safeQueuePage+1)}>Next</button></div></div>}
   </div>
  </>
 }

@@ -30,7 +30,7 @@ describe('dashboard relationship summary', () => {
       }),
     } as any);
     expect(result.data).toBeNull();
-    expect(result.error?.message).toContain('202610270002_action_schema_and_relationship_summary.sql');
+    expect(result.error?.message).toContain('202610280001_dashboard_relationship_rpcs.sql');
     expect(result.error?.message).toContain("NOTIFY pgrst, 'reload schema'");
   });
 

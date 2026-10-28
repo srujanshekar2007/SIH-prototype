@@ -30,19 +30,42 @@ export async function fetchComplaintCases(client: SupabaseClient) {
   };
 }
 
-export async function fetchRelationshipReviews(client: SupabaseClient) {
-  const query = (columns: string) => fetchAllPages<any>((from, to) => client.from('case_relationships')
-    .select(columns).order('created_at', { ascending: false }).range(from, to));
-  const current = await query('id,source_case_id,target_case_id,relationship_type,review_status,match_reasons,semantic_similarity,semantic_model,algorithm_version,matching_fields,explanation,created_at,reviewed_at,review_note');
-  const message = [current.error?.message, current.error?.details, current.error?.hint].filter(Boolean).join(' ').toLowerCase();
-  const migrationMissing = ['semantic_similarity', 'semantic_model', 'matching_fields', 'explanation', 'reviewed_at', 'review_note'].some((column) => message.includes(column))
-    && ['42703', 'PGRST204'].includes(current.error?.code);
-  if (!migrationMissing) return current;
-  const baseline = await query('id,source_case_id,target_case_id,relationship_type,review_status,match_reasons,created_at,reviewed_at,review_note');
-  return baseline.error ? baseline : {
-    ...baseline,
-    data: (baseline.data || []).map((row: any) => ({ ...row, semantic_similarity: null, semantic_model: null, algorithm_version: null, matching_fields: [], explanation: {} })),
-  };
+export type RelationshipReviewPageRequest = {
+  page: number;
+  pageSize: number;
+  status: 'pending' | 'confirmed' | 'rejected' | null;
+  bureauId: string | null;
+  institutionId: string | null;
+  minimumSimilarity: number | null;
+};
+
+export type RelationshipReviewPage = { rows: any[]; totalCount: number };
+
+export async function fetchRelationshipReviewPage(client: SupabaseClient, request: RelationshipReviewPageRequest) {
+  try {
+    const { data, error } = await client.rpc('dashboard_relationship_review_page', {
+      p_review_status: request.status,
+      p_bureau_id: request.bureauId,
+      p_institution_id: request.institutionId,
+      p_min_similarity: request.minimumSimilarity,
+      p_page_size: request.pageSize,
+      p_page_offset: (request.page - 1) * request.pageSize,
+    });
+    if (error) {
+      const details = [error.code, error.message, error.details, error.hint].filter(Boolean).join(' ').toLowerCase();
+      if (error.code === 'PGRST202' || details.includes('dashboard_relationship_review_page') && details.includes('schema cache')) {
+        return { data: null as RelationshipReviewPage | null, error: new Error('Supabase cannot find the paginated relationship-review function. Apply migration 202610280001_dashboard_relationship_rpcs.sql, then reload the PostgREST schema cache if needed.') };
+      }
+      return { data: null as RelationshipReviewPage | null, error };
+    }
+    const value = data as { rows?: unknown; total_count?: unknown } | null;
+    if (!value || !Array.isArray(value.rows) || !Number.isSafeInteger(value.total_count) || Number(value.total_count) < 0) {
+      return { data: null as RelationshipReviewPage | null, error: new Error('The relationship page returned an incomplete or invalid response.') };
+    }
+    return { data: { rows: value.rows, totalCount: value.total_count as number }, error: null as any };
+  } catch (error) {
+    return { data: null as RelationshipReviewPage | null, error };
+  }
 }
 
 export type DashboardRelationshipSummary = {
@@ -61,7 +84,7 @@ export async function fetchDashboardRelationshipSummary(client: SupabaseClient) 
         return {
           data: null as DashboardRelationshipSummary | null,
           error: new Error(
-            'Supabase cannot find dashboard_relationship_summary. Check whether migration 202610270002_action_schema_and_relationship_summary.sql is applied and the function exists. If the function exists, run NOTIFY pgrst, \'reload schema\'; in the Supabase SQL Editor.',
+            'Supabase cannot find dashboard_relationship_summary. Apply migration 202610280001_dashboard_relationship_rpcs.sql; if the function is already present, run NOTIFY pgrst, \'reload schema\'; in the Supabase SQL Editor.',
           ),
         };
       }
