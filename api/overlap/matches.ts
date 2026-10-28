@@ -1,22 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
-import {
-  buildCandidatePairs,
-  canActorCompareCase,
-  complaintEmbeddingText,
-  EmbeddingProviderError,
-  EMBEDDING_BATCH_SIZE,
-  EMBEDDING_MODEL,
-  MAX_UNCACHED_EMBEDDINGS_PER_RUN,
-  makeSuggestion,
-  MATCHING_VERSION,
-  MAX_AUTHORIZED_CASES,
-  MAX_CANDIDATE_PAIRS,
-  resolveSimilarityThreshold,
-  relationshipKey,
-  requestEmbeddingBatch,
-  textHash,
-  type ComplaintForMatching,
-} from '../../server/semantic-matching';
+import type { ComplaintForMatching } from '../../server/semantic-matching';
 
 type RequestLike = {
   method?: string;
@@ -34,7 +16,10 @@ const MAX_DESCRIPTION = 8000;
 export default async function handler(req: RequestLike, res: ResponseLike) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  if (req.method !== 'POST') return reply(res, 405, { code: 'method_not_allowed', message: 'Use POST to generate suggestions.' });
+  if (String(req.method || '').toUpperCase() !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return reply(res, 405, { code: 'method_not_allowed', message: 'Use POST to generate suggestions.' });
+  }
 
   const authorization = header(req, 'authorization');
   const token = /^Bearer\s+(.+)$/i.exec(authorization || '')?.[1];
@@ -43,13 +28,18 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !anonKey) return reply(res, 503, { code: 'server_not_configured', message: 'Server-side Supabase URL and publishable key are not configured.' });
-  const callerClient = createClient(supabaseUrl, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
   let adminClient: any;
 
   try {
+    // Keep unsupported methods and configuration failures independent of runtime client setup.
+    const [{ createClient }, matching] = await Promise.all([
+      import('@supabase/supabase-js'),
+      import('../../server/semantic-matching'),
+    ]);
+    const callerClient = createClient(supabaseUrl, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
     const { data: auth, error: authError } = await callerClient.auth.getUser(token);
     if (authError || !auth.user) return reply(res, 401, { code: 'unauthenticated', message: 'Your session is invalid or expired. Sign in again.' });
 
@@ -71,13 +61,13 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
     adminClient = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
-    const model = process.env.OPENAI_EMBEDDING_MODEL || EMBEDDING_MODEL;
+    const model = process.env.OPENAI_EMBEDDING_MODEL || matching.EMBEDDING_MODEL;
 
     if (req.body !== undefined && req.body !== null && (typeof req.body !== 'object' || Array.isArray(req.body))) {
       return reply(res, 400, { code: 'invalid_request', message: 'Send the matching options as a JSON object.' });
     }
     const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
-    const thresholdResult = resolveSimilarityThreshold(process.env.AI_SIMILARITY_THRESHOLD, body.threshold);
+    const thresholdResult = matching.resolveSimilarityThreshold(process.env.AI_SIMILARITY_THRESHOLD, body.threshold);
     if ('error' in thresholdResult && thresholdResult.error === 'invalid_request') {
       return reply(res, 400, { code: 'invalid_threshold', message: 'threshold must be a finite number from 0 to 1, or null to use the configured default.' });
     }
@@ -93,11 +83,11 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
         .order('received_at', { ascending: false }).range(from, from + 499);
       if (error) return reply(res, 503, { code: 'authorized_cases_unavailable', message: 'Could not load complaint records permitted by your Supabase access scope.' });
       rows.push(...((data || []) as unknown as ComplaintForMatching[]));
-      if (rows.length > MAX_AUTHORIZED_CASES) return reply(res, 413, { code: 'scope_too_large', message: `AI matching is capped at ${MAX_AUTHORIZED_CASES} authorized cases per run. Ask an administrator to narrow the scope or deploy indexed retrieval.` });
+      if (rows.length > matching.MAX_AUTHORIZED_CASES) return reply(res, 413, { code: 'scope_too_large', message: `AI matching is capped at ${matching.MAX_AUTHORIZED_CASES} authorized cases per run. Ask an administrator to narrow the scope or deploy indexed retrieval.` });
       if ((data || []).length < 500) break;
     }
 
-    const actorRows = rows.filter((row) => canActorCompareCase(row, profile, auth.user.id));
+    const actorRows = rows.filter((row) => matching.canActorCompareCase(row, profile, auth.user.id));
     const { data: existingRows, error: existingError } = await callerClient.from('case_relationships')
       .select('source_case_id,target_case_id,review_status,semantic_similarity,semantic_model,source_text_hash,target_text_hash,explanation');
     if (existingError) {
@@ -106,10 +96,10 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
         message: 'Apply migration 202610270001_ai_semantic_overlap.sql to enable the AI review metadata and embedding cache. Existing rule-based suggestions remain available.',
       });
     }
-    const existing = new Map((existingRows || []).map((row: any) => [relationshipKey(row.source_case_id, row.target_case_id), row]));
+    const existing = new Map((existingRows || []).map((row: any) => [matching.relationshipKey(row.source_case_id, row.target_case_id), row]));
     let pairs;
     try {
-      pairs = buildCandidatePairs(actorRows, existing, model, MAX_CANDIDATE_PAIRS, threshold);
+      pairs = matching.buildCandidatePairs(actorRows, existing, model, matching.MAX_CANDIDATE_PAIRS, threshold);
     } catch (error) {
       return reply(res, 413, { code: 'candidate_limit', message: error instanceof Error ? error.message : 'The candidate limit was exceeded.' });
     }
@@ -119,7 +109,7 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
       aboveThreshold: 0,
       cached: 0,
       model,
-      algorithmVersion: MATCHING_VERSION,
+      algorithmVersion: matching.MATCHING_VERSION,
       threshold,
       message: 'No new cross-bureau candidates with enough complaint text were found for the same institution.',
     });
@@ -139,31 +129,31 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
     const vectors = new Map<string, number[]>();
     const missing: { row: ComplaintForMatching; text: string; hash: string }[] = [];
     for (const row of candidateRows) {
-      const text = complaintEmbeddingText(row);
+      const text = matching.complaintEmbeddingText(row);
       if (!text) continue;
-      const hash = textHash(text);
+      const hash = matching.textHash(text);
       const cached = cache.get(row.id);
       if (cached?.content_hash === hash && cached.model === model && Array.isArray(cached.embedding) && cached.embedding.length === 1536) {
         vectors.set(row.id, cached.embedding);
       } else missing.push({ row, text: text.slice(0, MAX_DESCRIPTION), hash });
     }
 
-    if (missing.length > MAX_UNCACHED_EMBEDDINGS_PER_RUN) {
+    if (missing.length > matching.MAX_UNCACHED_EMBEDDINGS_PER_RUN) {
       return reply(res, 413, {
         code: 'embedding_batch_limit',
-        message: `This run needs embeddings for ${missing.length} uncached complaints; the per-run limit is ${MAX_UNCACHED_EMBEDDINGS_PER_RUN}. Narrow the scope or rerun after cached vectors are available.`,
+        message: `This run needs embeddings for ${missing.length} uncached complaints; the per-run limit is ${matching.MAX_UNCACHED_EMBEDDINGS_PER_RUN}. Narrow the scope or rerun after cached vectors are available.`,
       });
     }
 
     const cachedCount = vectors.size;
-    for (let i = 0; i < missing.length; i += EMBEDDING_BATCH_SIZE) {
-      const batch = missing.slice(i, i + EMBEDDING_BATCH_SIZE);
+    for (let i = 0; i < missing.length; i += matching.EMBEDDING_BATCH_SIZE) {
+      const batch = missing.slice(i, i + matching.EMBEDDING_BATCH_SIZE);
       let orderedVectors: number[][];
-      try { orderedVectors = await requestEmbeddingBatch(batch.map((entry) => entry.text), process.env.OPENAI_API_KEY, model); }
+      try { orderedVectors = await matching.requestEmbeddingBatch(batch.map((entry) => entry.text), process.env.OPENAI_API_KEY, model); }
       catch (error) {
-        if (error instanceof EmbeddingProviderError && error.kind === 'timeout') return reply(res, 504, { code: 'provider_timeout', message: 'The embedding provider timed out. No relationship suggestions were changed.' });
-        if (error instanceof EmbeddingProviderError && error.kind === 'rate_limit') return reply(res, 503, { code: 'provider_rate_limited', message: 'The embedding provider is rate-limiting requests. Wait briefly and retry.' });
-        if (error instanceof EmbeddingProviderError && error.kind === 'invalid_response') return reply(res, 502, { code: 'invalid_provider_response', message: 'The embedding provider returned an invalid vector. No suggestion records were changed.' });
+        if (error instanceof matching.EmbeddingProviderError && error.kind === 'timeout') return reply(res, 504, { code: 'provider_timeout', message: 'The embedding provider timed out. No relationship suggestions were changed.' });
+        if (error instanceof matching.EmbeddingProviderError && error.kind === 'rate_limit') return reply(res, 503, { code: 'provider_rate_limited', message: 'The embedding provider is rate-limiting requests. Wait briefly and retry.' });
+        if (error instanceof matching.EmbeddingProviderError && error.kind === 'invalid_response') return reply(res, 502, { code: 'invalid_provider_response', message: 'The embedding provider returned an invalid vector. No suggestion records were changed.' });
         return reply(res, 502, { code: 'provider_error', message: 'The embedding provider failed to process this batch. No suggestion records were changed.' });
       }
       const cacheUpserts = batch.map((entry, index) => ({
@@ -178,7 +168,7 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
       for (let index = 0; index < batch.length; index += 1) vectors.set(batch[index].row.id, orderedVectors[index]);
     }
 
-    const suggestions = pairs.map((pair) => makeSuggestion(pair, vectors, threshold));
+    const suggestions = pairs.map((pair) => matching.makeSuggestion(pair, vectors, threshold));
     const persisted = suggestions.filter((suggestion) => {
       const existingRow = existing.get(suggestion.key);
       return suggestion.shouldInsert || existingRow?.review_status === 'pending';
@@ -187,7 +177,7 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
       target_case_id: suggestion.target.id,
       semantic_similarity: suggestion.similarity,
       semantic_model: model,
-      algorithm_version: MATCHING_VERSION,
+      algorithm_version: matching.MATCHING_VERSION,
       matching_fields: suggestion.matchingFields,
       match_reasons: suggestion.reasons,
       explanation: suggestion.explanation,
@@ -207,7 +197,7 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
       aboveThreshold: suggestions.filter((suggestion) => suggestion.shouldInsert).length,
       cached: cachedCount,
       model,
-      algorithmVersion: MATCHING_VERSION,
+      algorithmVersion: matching.MATCHING_VERSION,
       threshold,
       message: 'AI-generated suggestions require human review. Similarity is not a probability and never confirms a duplicate.',
     });

@@ -11,6 +11,18 @@ afterEach(async () => {
 });
 
 describe('local semantic matching route', () => {
+  it('returns 405 and Allow for GET before touching server configuration', async () => {
+    const server = createLocalApiApp().listen(0, '127.0.0.1');
+    openServers.push(server);
+    await new Promise<void>(resolve => server.once('listening', resolve));
+    const address = server.address() as AddressInfo;
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/overlap/matches`, { method: 'GET' });
+    expect(response.status).toBe(405);
+    expect(response.headers.get('allow')).toBe('POST');
+    expect(response.headers.get('content-type')).toContain('application/json');
+    expect(await response.json()).toMatchObject({ code: 'method_not_allowed' });
+  });
+
   it('mounts /api/overlap/matches and returns structured JSON before any database access', async () => {
     const server = createLocalApiApp().listen(0, '127.0.0.1');
     openServers.push(server);

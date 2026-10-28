@@ -22,7 +22,7 @@ export default function App(){
  const [theme,setTheme]=useState<'light'|'dark'>(()=>{try{const stored=localStorage.getItem('aicte-theme');if(stored==='dark'||stored==='light')return stored}catch{/* Use the preloaded document theme when storage is unavailable. */}return document.documentElement.dataset.theme==='dark'?'dark':'light'});
  const [page,setPage]=useState<Page>('Dashboard'),[mobileNav,setMobileNav]=useState(false),[session,setSession]=useState<any>(null),[profile,setProfile]=useState<any>(null),[profileLoading,setProfileLoading]=useState(true),[profileError,setProfileError]=useState(''),[profileRetry,setProfileRetry]=useState(0),[lastUpdated,setLastUpdated]=useState<Date|null>(null),[coordination,setCoordination]=useState<any[]>([]),[openCoordination,setOpenCoordination]=useState<any[]>([]),[bureaus,setBureaus]=useState<any[]>([]),[transfers,setTransfers]=useState<any[]>([]),[transferCounts,setTransferCounts]=useState<{inBureau:number;outBureau:number}|null>(null),[audits,setAudits]=useState<any[]>([]),[officers,setOfficers]=useState<any[]>([]),[authLoading,setAuthLoading]=useState(true),[passwordRecovery,setPasswordRecovery]=useState(false),[loading,setLoading]=useState(false),[pageDataLoading,setPageDataLoading]=useState(false),[queueLoading,setQueueLoading]=useState(false),[queueError,setQueueError]=useState(''),[relationshipSummaryError,setRelationshipSummaryError]=useState(''),[relationshipSummaryLoading,setRelationshipSummaryLoading]=useState(false),[error,setError]=useState(''),[complaintError,setComplaintError]=useState(''),[cases,setCases]=useState<CaseRow[]>([]),[actions,setActions]=useState<any[]>([]),[institutions,setInstitutions]=useState<any[]>([]),[overlaps,setOverlaps]=useState<any[]>([]),[relationshipSummary,setRelationshipSummary]=useState<DashboardRelationshipSummary|null>(null),[search,setSearch]=useState(''),[filter,setFilter]=useState('All statuses'),[chatOpen,setChatOpen]=useState(false),[chatInput,setChatInput]=useState(''),[messages,setMessages]=useState<{from:'assistant'|'user';text:string}[]>([{from:'assistant',text:'Hello! I can help you navigate this complaint monitoring website. What would you like to know?'}]),[toast,setToast]=useState(''),[selectedCase,setSelectedCase]=useState<CaseRow|null>(null),[selectedInstitution,setSelectedInstitution]=useState<any|null>(null),[modal,setModal]=useState('');
  const sessionStartedAtRef=useRef<number|null>(null),sessionRef=useRef<any>(null),expiredSignOutRef=useRef(false),expireSessionRef=useRef<()=>void>(()=>{});
- const coreLoadInFlightRef=useRef(false),queueLoadInFlightRef=useRef(false),relationshipSummaryRequestRef=useRef<Promise<any>|null>(null),loadedPageDataRef=useRef(new Map<string,number>()),pendingPageDataRef=useRef(new Map<string,Promise<void>>());
+ const coreLoadInFlightRef=useRef(false),queueLoadInFlightRef=useRef(false),relationshipSummaryRequestRef=useRef<Promise<any>|null>(null),relationshipSummaryRefreshRef=useRef<Promise<void>|null>(null),loadedPageDataRef=useRef(new Map<string,number>()),pendingPageDataRef=useRef(new Map<string,Promise<void>>());
  sessionRef.current=session;
  useEffect(()=>{document.documentElement.dataset.theme=theme;try{localStorage.setItem('aicte-theme',theme)}catch{/* Theme remains active for this session when storage is unavailable. */}},[theme]);
  useEffect(()=>{
@@ -42,7 +42,7 @@ export default function App(){
   if(!supabase){setAuthLoading(false);return}
   let mounted=true,authEventReceived=false;
   const storage=(()=>{try{return window.sessionStorage}catch{return {getItem:()=>null,setItem:()=>{},removeItem:()=>{}}}})();
-  const clearProtectedData=()=>{setProfile(null);setProfileError('');setProfileLoading(false);setComplaintError('');setCases([]);setActions([]);setInstitutions([]);setOverlaps([]);setRelationshipSummary(null);setRelationshipSummaryError('');setRelationshipSummaryLoading(false);setCoordination([]);setOpenCoordination([]);setBureaus([]);setTransfers([]);setTransferCounts(null);setAudits([]);setOfficers([]);setLastUpdated(null);loadedPageDataRef.current.clear();pendingPageDataRef.current.clear();coreLoadInFlightRef.current=false;queueLoadInFlightRef.current=false};
+  const clearProtectedData=()=>{setProfile(null);setProfileError('');setProfileLoading(false);setComplaintError('');setCases([]);setActions([]);setInstitutions([]);setOverlaps([]);setRelationshipSummary(null);setRelationshipSummaryError('');setRelationshipSummaryLoading(false);setCoordination([]);setOpenCoordination([]);setBureaus([]);setTransfers([]);setTransferCounts(null);setAudits([]);setOfficers([]);setLastUpdated(null);loadedPageDataRef.current.clear();pendingPageDataRef.current.clear();coreLoadInFlightRef.current=false;queueLoadInFlightRef.current=false;relationshipSummaryRequestRef.current=null;relationshipSummaryRefreshRef.current=null};
   const expireSession=()=>{
    if(expiredSignOutRef.current)return;
    expiredSignOutRef.current=true;
@@ -101,14 +101,26 @@ export default function App(){
   relationshipSummaryRequestRef.current=request;
   return request;
  };
+ const refreshRelationshipSummary=()=>{
+  const actorId=session?.user?.id;
+  if(!supabase||!actorId)return Promise.resolve();
+  if(relationshipSummaryRefreshRef.current)return relationshipSummaryRefreshRef.current;
+  setRelationshipSummaryLoading(true);setRelationshipSummaryError('');
+  const task=(async()=>{
+   try{const result=await requestRelationshipSummary();if(sessionRef.current?.user?.id!==actorId)return;if(result.error){setRelationshipSummary(null);setRelationshipSummaryError(friendlyError(result.error))}else if(result.data){setRelationshipSummary(result.data);setRelationshipSummaryError('')}else{setRelationshipSummary(null);setRelationshipSummaryError('The relationship summary returned no data.')}}
+   catch(reason){if(sessionRef.current?.user?.id===actorId){setRelationshipSummary(null);setRelationshipSummaryError(friendlyError(reason))}}
+   finally{if(sessionRef.current?.user?.id===actorId)setRelationshipSummaryLoading(false)}
+  })().finally(()=>{if(relationshipSummaryRefreshRef.current===task)relationshipSummaryRefreshRef.current=null});
+  relationshipSummaryRefreshRef.current=task;
+  return task;
+ };
  const load=async()=>{
   if(!supabase||!session||!profile||!profile.active||dashboardKind(profile)==='denied'||coreLoadInFlightRef.current)return;
-  coreLoadInFlightRef.current=true;setLoading(true);setError('');setComplaintError('');setRelationshipSummaryLoading(true);setRelationshipSummaryError('');
+  coreLoadInFlightRef.current=true;setLoading(true);setError('');setComplaintError('');void refreshRelationshipSummary();
   try{
    const bureauScoped=dashboardKind(profile)==='bureau';
-   const [c,summary,a,q,l,transferSummary]=await Promise.all([
+   const [c,a,q,l,transferSummary]=await Promise.all([
     fetchComplaintCases(supabase),
-    requestRelationshipSummary(),
     fetchCaseActions(supabase),
     fetchAllPages<any>((from,to)=>supabase!.from('coordination_requests').select('id,complaint_id,status,created_at').eq('status','open').order('created_at',{ascending:false}).range(from,to)),
     profile.is_admin?supabase.from('audit_logs').select('id,actor_id,entity_type,entity_id,action,created_at').order('created_at',{ascending:false}).limit(50):Promise.resolve({data:[],error:null}),
@@ -118,17 +130,14 @@ export default function App(){
    const failures=[['complaints',c],['actions',a],['open coordination requests',q],...(profile.is_admin?[['audit history',l] as any[]]:[]),...(bureauScoped?[['transfer summary',transferSummary] as any[]]:[])].filter(([,result]:any)=>result.error);
    if(failures.length)setError(failures.map(([name,result]:any)=>`${name}: ${friendlyError(result.error)}`).join(' · '));
    if(!c.error)setCases((c.data||[]) as unknown as CaseRow[]);
-   if(!summary.error&&summary.data){setRelationshipSummary(summary.data);setRelationshipSummaryError('')}
-   else{setRelationshipSummary(null);setRelationshipSummaryError(summary.error?friendlyError(summary.error):'The relationship summary returned no data.')}
-   setRelationshipSummaryLoading(false);
    if(!a.error)setActions(Array.isArray(a.data)?a.data:[]);
    if(!q.error)setOpenCoordination(q.data||[]);
    if(!l.error)setAudits(l.data||[]);
    if(!transferSummary.error)setTransferCounts(transferSummary.data);
    else if(bureauScoped)setTransferCounts(null);
    if(!failures.length)setLastUpdated(new Date());
-  }catch(reason){setError(friendlyError(reason));setComplaintError(friendlyError(reason));setRelationshipSummary(null);setRelationshipSummaryError(friendlyError(reason))}
-  finally{setRelationshipSummaryLoading(false);setLoading(false);coreLoadInFlightRef.current=false}
+  }catch(reason){setError(friendlyError(reason));setComplaintError(friendlyError(reason))}
+  finally{setLoading(false);coreLoadInFlightRef.current=false}
  };
  const ensurePageData=async(key:string,query:()=>Promise<any>,apply:(data:any)=>void,force=false)=>{
   if(!supabase||!session)return;
@@ -159,11 +168,7 @@ export default function App(){
   :fetchAllPages<any>((from,to)=>supabase!.from('profiles').select('id,display_name,bureau_id,role,active').eq('active',true).eq('bureau_id',profile?.bureau_id).order('display_name').range(from,to)),setOfficers);
  const invalidatePageData=(keys:string[])=>{for(const key of keys){for(const cacheKey of loadedPageDataRef.current.keys())if(cacheKey.endsWith(`:${key}`))loadedPageDataRef.current.delete(cacheKey)}};
  const retryRelationshipSummary=async()=>{
-  if(!supabase)return;
-  setRelationshipSummaryLoading(true);setRelationshipSummaryError('');
-  try{const result=await requestRelationshipSummary();if(result.error){setRelationshipSummary(null);setRelationshipSummaryError(friendlyError(result.error))}else if(result.data){setRelationshipSummary(result.data);setRelationshipSummaryError('')}else{setRelationshipSummary(null);setRelationshipSummaryError('The relationship summary returned no data.')}}
-  catch(reason){setRelationshipSummary(null);setRelationshipSummaryError(friendlyError(reason))}
-  finally{setRelationshipSummaryLoading(false)}
+  await refreshRelationshipSummary();
  };
  const loadRelationshipQueue=async()=>{
   if(!supabase||!session||!profile?.active||queueLoadInFlightRef.current)return;
@@ -182,7 +187,7 @@ export default function App(){
  useEffect(()=>{void loadPageData(page)},[page,session,profile]);
  useEffect(()=>{if(page==='Overlap Monitoring')void loadRelationshipQueue()},[page,session,profile]);
  useEffect(()=>{void load()},[session,profile]);
- useEffect(()=>{if(!session||!profile?.active)return;const timer=window.setInterval(()=>{if(document.visibilityState==='visible')void load()},5*60_000);return()=>window.clearInterval(timer)},[session,profile]);
+ useEffect(()=>{if(!session||!profile?.active||page!=='Dashboard')return;const timer=window.setInterval(()=>{if(document.visibilityState==='visible')void load()},5*60_000);return()=>window.clearInterval(timer)},[session,profile,page]);
  const deferredSearch=useDeferredValue(search.trim().toLowerCase());const filtered=useMemo(()=>cases.filter(c=>(filter==='All statuses'||(filter==='Overdue'?isPastNextAction(c):filter==='Unassigned'?!c.assigned_officer_id:c.status.toLowerCase()===filter.toLowerCase()))&&(!deferredSearch||[c.case_number,c.institutions?.name,c.institutions?.internal_id,c.institutions?.aicte_permanent_id,c.institutions?.region,c.category,c.bureaus?.name].some(x=>x?.toLowerCase().includes(deferredSearch)))),[cases,filter,deferredSearch]);
  const go=(p:Page)=>{setPage(p);setMobileNav(false)};const openCase=(key:string)=>{const match=cases.find(c=>c.id===key||c.case_number===key);if(match)setSelectedCase(match);else{go('Complaint Registry');setSearch(key)}};const openMetric=(key:string)=>{if(key==='overlap'){go('Overlap Monitoring');return}if(key==='awaiting'){go('Coordination Workspace');return}if(key==='attention'){go('Alerts & Deadlines');return}if(key==='institutions'){go('Institutions');return}if(key==='recent'||key==='disposed_by_you'){go('Workflow & History');return}if(key==='transferred_in'||key==='transferred_out'){go('Transfers & Escalations');return}if(key==='deadline_config'){go('Alerts & Deadlines');return}setFilter(key==='all'?'All statuses':key);setSearch('');go('Complaint Registry')};
  const kind=dashboardKind(profile);const pendingOverlaps=relationshipSummary?.recent||[];const dashboardCases=useMemo(()=>session?.user?.id?casesForDashboard(cases,kind,session.user.id,profile):[],[cases,kind,profile,session?.user?.id]);const chartData=useMemo(()=>makeChartData(dashboardCases,actions),[dashboardCases,actions]);const bureauData=chartData.bureau;const relationshipSummaryForCards=relationshipSummaryLoading?(relationshipSummary?'refreshing':'loading'):relationshipSummary;const cards=useMemo(()=>buildDashboardCards(kind,dashboardCases,relationshipSummaryForCards,openCoordination,kind==='bureau'?transferCounts:[],actions,profile),[kind,dashboardCases,relationshipSummaryForCards,openCoordination,transferCounts,actions,profile]);

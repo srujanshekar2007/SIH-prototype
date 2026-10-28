@@ -11,8 +11,8 @@ export function createLocalApiApp() {
     next();
   });
 
-  // Reuse the authenticated server-side semantic matcher for local Vite development.
-  app.post('/api/overlap/matches', (req, res) => {
+  // Reuse the same method handling and authenticated matcher for local development.
+  app.all('/api/overlap/matches', (req, res) => {
     void semanticMatches(req, res);
   });
 
