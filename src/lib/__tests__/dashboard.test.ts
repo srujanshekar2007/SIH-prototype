@@ -32,6 +32,15 @@ describe('role dashboard scope',()=>{
     expect(isPastNextAction(row,new Date('2026-01-04T00:00:00.000Z'))).toBe(true);
     expect(isPastNextAction({...row,next_action_at:null,expected_disposal_at:'2026-01-02'},new Date('2026-01-04T00:00:00.000Z'))).toBe(true);
   });
+  it('treats DATE deadlines as local calendar days through the end of the due date',()=>{
+    const row={...cases[0],expected_disposal_at:'2026-01-02'};
+    const lateOnDueDay=new Date(2026,0,2,23,59,59);
+    const followingDay=new Date(2026,0,3,0,0,0);
+    expect(isPastNextAction(row,lateOnDueDay)).toBe(false);
+    expect(isApproaching(row,lateOnDueDay,0)).toBe(true);
+    expect(isPastNextAction(row,followingDay)).toBe(true);
+    expect(isPastNextAction({...row,status:'Disposed'},followingDay)).toBe(false);
+  });
   it('filters report cases by inclusive receipt dates and Bureau/Cell',()=>{
     const scoped=filterReportCases(cases,{bureauId:'p',fromDate:'2026-01-01',toDate:'2026-01-01'});
     expect(scoped.map(row=>row.id)).toEqual(['1','2']);

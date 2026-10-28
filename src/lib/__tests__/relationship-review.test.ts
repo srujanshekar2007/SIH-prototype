@@ -13,4 +13,12 @@ describe('recordRelationshipReview', () => {
     expect(update).toHaveBeenCalledWith({ review_status: decision, reviewed_at: '2026-10-27T00:00:00.000Z', reviewed_by: 'official-id' });
     expect(eq).toHaveBeenCalledWith('id', 'relation-id');
   });
+
+  it('persists a trimmed optional review note with the human decision', async () => {
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const update = vi.fn((_payload: unknown) => ({ eq }));
+    const client = { from: () => ({ update }) };
+    await recordRelationshipReview(client, 'relation-id', 'rejected', 'official-id', '2026-10-27T00:00:00.000Z', '  Different issue  ');
+    expect(update).toHaveBeenCalledWith({ review_status: 'rejected', reviewed_at: '2026-10-27T00:00:00.000Z', reviewed_by: 'official-id', review_note: 'Different issue' });
+  });
 });

@@ -80,6 +80,31 @@ describe('AI overlap endpoint authorization/configuration', () => {
     expect(mockClients.createClient).not.toHaveBeenCalled();
   });
 
+  it('falls back when the optional bureau manager column is absent', async () => {
+    configureServer();
+    vi.stubEnv('OPENAI_API_KEY', '');
+    const columns: string[] = [];
+    let reads = 0;
+    const query: any = {
+      select: (value: string) => { columns.push(value); return query; },
+      eq: () => query,
+      maybeSingle: async () => ++reads === 1
+        ? { data: null, error: { code: '42703', message: 'column profiles.can_manage_bureau does not exist' } }
+        : { data: { id: 'official', role: 'rb_officer', is_admin: false, active: true, bureau_id: 'bureau' }, error: null },
+    };
+    mockClients.createClient.mockReturnValueOnce({
+      auth: { getUser: async () => ({ data: { user: { id: 'official' } }, error: null }) },
+      from: vi.fn(() => query),
+    });
+
+    const result = await run({ authorization: 'Bearer signed-in-token' });
+
+    expect(result.code).toBe(503);
+    expect(result.body).toMatchObject({ code: 'ai_not_configured' });
+    expect(columns).toHaveLength(2);
+    expect(columns[1]).not.toContain('can_manage_bureau');
+  });
+
   it('preserves a valid authenticated POST response when no candidates need embeddings', async () => {
     configureServer();
     const profileQuery: any = {

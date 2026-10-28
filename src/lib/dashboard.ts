@@ -14,8 +14,24 @@ export function casesForDashboard(rows:CaseRow[],kind:DashboardKind,userId:strin
   if(kind==='administrator'||kind==='oversight')return rows;
   return [];
 }
-export const isPastNextAction=(c:CaseRow,now=new Date())=>Boolean(c.status!=='Disposed'&&[c.next_action_at,c.expected_disposal_at].some(d=>d&&new Date(d)<now));
-export const isApproaching=(c:CaseRow,now=new Date(),windowDays?:number)=>windowDays!==undefined&&Boolean([c.next_action_at,c.expected_disposal_at].some(d=>d&&new Date(d)>=now&&new Date(d)<=new Date(now.getTime()+windowDays*86400000))&&c.status!=='Disposed');
+function isDateOnly(value:string){return /^\d{4}-\d{2}-\d{2}$/.test(value)}
+function localDateKey(date:Date){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}
+function dateOnlyWithinWindow(value:string,now:Date,windowDays:number){
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const due=new Date(`${value}T00:00:00`);
+  const end=new Date(today);end.setDate(end.getDate()+windowDays);
+  return !Number.isNaN(due.valueOf())&&due>=today&&due<=end;
+}
+export const isPastNextAction=(c:CaseRow,now=new Date())=>Boolean(c.status!=='Disposed'&&[c.next_action_at,c.expected_disposal_at].some(value=>{
+  if(!value)return false;
+  if(isDateOnly(value))return value<localDateKey(now);
+  const timestamp=new Date(value).valueOf();return Number.isFinite(timestamp)&&timestamp<now.valueOf();
+}));
+export const isApproaching=(c:CaseRow,now=new Date(),windowDays?:number)=>windowDays!==undefined&&windowDays>=0&&Boolean(c.status!=='Disposed'&&[c.next_action_at,c.expected_disposal_at].some(value=>{
+  if(!value)return false;
+  if(isDateOnly(value))return dateOnlyWithinWindow(value,now,windowDays);
+  const timestamp=new Date(value).valueOf();return Number.isFinite(timestamp)&&timestamp>=now.valueOf()&&timestamp<=now.valueOf()+windowDays*86400000;
+}));
 export function filterReportCases(rows:CaseRow[],filters:{bureauId?:string;fromDate?:string;toDate?:string}){
   return rows.filter(c=>(!filters.bureauId||filters.bureauId==='all'||c.bureau_id===filters.bureauId)&&(!filters.fromDate||c.received_at.slice(0,10)>=filters.fromDate)&&(!filters.toDate||c.received_at.slice(0,10)<=filters.toDate));
 }

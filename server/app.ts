@@ -16,5 +16,15 @@ export function createLocalApiApp() {
     void semanticMatches(req, res);
   });
 
+  app.use((error: any, req: Request, res: Response, next: (error?: unknown) => void) => {
+    if (req.path !== '/api/overlap/matches') {
+      return next(error);
+    }
+    if (error?.type === 'entity.too.large') {
+      return res.status(413).json({ code: 'request_too_large', message: 'The request body exceeds the allowed size.' });
+    }
+    return res.status(400).json({ code: 'invalid_json', message: 'Send a valid JSON request body.' });
+  });
+
   return app;
 }

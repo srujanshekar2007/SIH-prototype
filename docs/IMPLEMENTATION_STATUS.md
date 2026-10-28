@@ -1,23 +1,29 @@
 # Implementation status and handoff
 
-Status reflects repository inspection and local checks on 2026-10-27. It is not a production certification.
+Last repository audit: 2026-10-28. This report distinguishes local implementation from live verification.
 
-| Area | Status | Notes |
+| Workstream | Current status | Evidence and remaining limit |
 |---|---|---|
-| 1. Complaint, institution, workflow UI | IMPLEMENTED BUT NOT FULLY TESTED | Existing pages and Supabase queries are present; no full browser/role E2E run. |
-| 2. API endpoint and local/prod routing | IMPLEMENTED BUT NOT FULLY TESTED | Shared authenticated handler at `api/overlap/matches.ts`; local Vite proxy and root Vercel function config exist. Live Vercel route not verified. |
-| 3. Hosted AI provider | CONFIGURATION REQUIRED | OpenAI embeddings code exists; key, migration, and data-owner approval are required. No Gemini or generative summary integration exists. |
-| 4. Semantic suggestions and review | IMPLEMENTED BUT NOT FULLY TESTED | Institution-gated cross-bureau cosine suggestions and human review; local tests pass; live RPC/RLS not tested. |
-| 5. Auth, role boundaries, RLS | IMPLEMENTED BUT NOT FULLY TESTED | SQL policies/helpers and server checks exist; apply migrations and test with real role accounts before production. |
-| 6. Reproducible fictional demo dataset | NOT IMPLEMENTED | No safe idempotent seed script or local demo accounts are supplied. No records were generated or inserted. |
-| 7. Multi-bureau participation | NOT IMPLEMENTED | Each complaint has one primary bureau/officer. Related cases and coordination requests exist; no secondary-participant table. |
-| 8. Alerts/deadlines/notifications | IMPLEMENTED BUT NOT FULLY TESTED | Client derives overdue/due-soon from recorded dates. No SLA policy, scheduler, email/SMS delivery, or persistent notification center is claimed. |
-| 9. Supporting document storage | NOT IMPLEMENTED | Metadata table only; private Storage bucket/policies/upload/download flow absent. |
-| 10. Audit browser and historical snapshots | IMPLEMENTED BUT NOT FULLY TESTED | Trigger-backed append-only audit records and a limited admin recent summary exist; full searchable browser and trustworthy historical backlog snapshots are absent. |
-| Typecheck, tests, build | IMPLEMENTED AND TESTED LOCALLY | `npm test` 50/50, `npm run typecheck`, and `npm run build` passed. No lint script exists. |
-| Live Supabase migration/configuration | BLOCKED BY EXTERNAL ACCESS | No authenticated project access/verified project ref; migrations were not applied. |
-| Production deployment verification | DEPLOYMENT REQUIRED | No Vercel project access or deployment was used. Push/deploy current reviewed revision, then test API route. |
+| 1. Database, migrations, data integrity | PARTIALLY IMPLEMENTED — LIVE VERIFICATION REQUIRED | Ordered additive migrations reviewed. The new dashboard summary RPC was run in the selected production project and returned a row in the user-provided SQL Editor screenshot. The live `profiles.can_manage_bureau` column was absent; migration `202610280002_validate_transfer_destination.sql` repairs this without changing legacy rows. It remains unapplied. |
+| 2. Vercel/API reliability | IMPLEMENTED — LIVE VERIFICATION REQUIRED | Shared Vercel/local handler, JSON method/error contract, auth checks, local parser errors and tests. The API profile query now falls back when the optional bureau-scope column is absent. Live GET returned JSON 405 with `Allow: POST`; unauthenticated POST returned JSON 401 on `https://sih-prototype-ruddy.vercel.app/api/overlap/matches`. Authorized POST/provider/persistence behavior remains unverified. |
+| 3. AI semantic matching | IMPLEMENTED — CONFIGURATION AND LIVE VERIFICATION REQUIRED | OpenAI `text-embedding-3-small`, 1536 dimensions, bounded/cached candidate processing, threshold, privacy approval and mocked tests are present. No provider request or labeled quality evaluation was run. |
+| 4. Relationship detection/review | IMPLEMENTED — LIVE VERIFICATION REQUIRED | Same-institution cross-bureau rule and semantic suggestions, server-paginated queue, human decisions, optional review note and audit trigger exist. SQL/RLS review was static; no multi-role live test was run. |
+| 5. Dynamic bureaus/transfers | PARTIALLY IMPLEMENTED — MIGRATION REQUIRED | Bureau options are database-backed. Transfer UI selects active destinations; migration `202610280002_validate_transfer_destination.sql` enforces a distinct active destination and repairs the confirmed missing scope column. Multi-bureau participants are intentionally not modeled; primary ownership plus transfer and coordination are retained. |
+| 6. Institution profile/history | IMPLEMENTED LOCALLY — BROWSER VERIFICATION REQUIRED | Search supports name, AICTE Permanent ID, internal ID, region and address. Institution history now shows bureau, officer, latest action and recorded dates for authorized cases. The page still relies on the app’s loaded authorized case set rather than dedicated server-side history pagination. |
+| 7. Complaint lifecycle | PARTIALLY IMPLEMENTED | Case create, action/status update, assignment, transfer and escalation are present and database-backed. No general edit flow or explicit transition matrix is implemented; reopen/transition rules need business-owner confirmation. |
+| 8. Audit/history | PARTIALLY IMPLEMENTED | Case actions and relationship decisions produce append-only audit entries; document upload audit is included in a pending migration. Admin UI shows only a recent 50-event summary, not a searchable audit browser. No historical backlog snapshots are fabricated. |
+| 9. Search/filter/navigation | PARTIALLY IMPLEMENTED | Registry, institution and relationship filters combine with authorized data. Relationship queue is server paginated; registry and institution pages still load all RLS-visible rows into the browser. |
+| 10. Deadlines/notifications | PARTIALLY IMPLEMENTED | Overdue calculations exclude disposed cases; date-only disposal deadlines are treated as local calendar dates through the due day. Notifications are local derived alerts; no official SLA, scheduler, email or SMS delivery is claimed. |
+| 11. Dashboard/reports | IMPLEMENTED LOCALLY — RESPONSIVE/LIVE VERIFICATION REQUIRED | Dashboard cards distinguish unavailable from zero; reports and CSV use authorized loaded records; counts derive from database records. No viewport/browser automation or production reconciliation was performed. |
+| 12. Private supporting documents | IMPLEMENTED LOCALLY — MIGRATION REQUIRED | Case detail now has allowlisted PDF/JPEG/PNG upload, case-scoped private object paths, signed downloads, metadata checks and upload audit. Migration `202610280003_private_supporting_documents.sql` creates the private bucket and policies. It is not applied; upload/download has not been live tested. Deletion is intentionally unavailable. |
+| 13. Authentication/security | IMPLEMENTED LOCALLY — REAL ROLE TEST REQUIRED | Supabase Auth, active profile checks, RLS, server JWT checks, role/scope checks and server-only secrets are present. API and helper tests use mocks; no live cross-bureau role matrix was executed. |
+| 14. Demo readiness | PARTIALLY IMPLEMENTED | A fictional-data walkthrough is documented. No demo seed script or demo users are included; no data was inserted. Use an isolated development project and provision accounts through an authorized admin. |
+| 15. QA/release readiness | IMPLEMENTED AND TESTED LOCALLY | 86 tests pass, TypeScript checks pass, production build passes and `git diff --check` passes. No browser E2E, viewport test, live provider test, or Vercel deployment verification was performed. |
+
+## Confirmed live database evidence
+
+The user ran the dashboard RPC migration in the Supabase SQL Editor for the selected `SIH-prototype` production project. A subsequent authenticated SQL query using the user's profile UUID returned one JSON row from `public.dashboard_relationship_summary()`. The output was visually truncated in the grid, but the RPC executed successfully. This verifies the summary function only; it does not verify the paginated queue RPC, all historical migrations, RLS across roles, AI persistence, Storage, or the Vercel endpoint.
 
 ## Change control
 
-Branch: `main`. Base commit: `64372f4 Update frontend UI`. The repository already contained uncommitted code changes before this assignment; they were preserved. No commit or push was made. Review `git status` and the diff before creating a commit.
+Starting branch: `main`. Starting commit: `ede997e42080c94fa00e07f501669e76acc17c98`. No commit, push, merge, or deployment was performed during this audit. Review the working-tree diff before applying the new migrations or releasing the frontend.

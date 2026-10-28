@@ -33,4 +33,34 @@ describe('local semantic matching route', () => {
     expect(response.headers.get('content-type')).toContain('application/json');
     expect(await response.json()).toMatchObject({ code: 'unauthenticated' });
   });
+
+  it('returns structured JSON for malformed request bodies', async () => {
+    const server = createLocalApiApp().listen(0, '127.0.0.1');
+    openServers.push(server);
+    await new Promise<void>(resolve => server.once('listening', resolve));
+    const address = server.address() as AddressInfo;
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/overlap/matches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{bad json',
+    });
+    expect(response.status).toBe(400);
+    expect(response.headers.get('content-type')).toContain('application/json');
+    expect(await response.json()).toMatchObject({ code: 'invalid_json' });
+  });
+
+  it('returns structured JSON when the request body exceeds the parser limit', async () => {
+    const server = createLocalApiApp().listen(0, '127.0.0.1');
+    openServers.push(server);
+    await new Promise<void>(resolve => server.once('listening', resolve));
+    const address = server.address() as AddressInfo;
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/overlap/matches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description: 'x'.repeat(3000) }),
+    });
+    expect(response.status).toBe(413);
+    expect(response.headers.get('content-type')).toContain('application/json');
+    expect(await response.json()).toMatchObject({ code: 'request_too_large' });
+  });
 });

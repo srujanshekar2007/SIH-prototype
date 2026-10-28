@@ -6,6 +6,7 @@ An administrative prototype for authorized officials to track institution-relate
 
 - Supabase Auth email/password login with provisioned accounts; public registration and self-selected roles are not provided.
 - Role-scoped dashboard, complaint registry, institution records, workflow/action history, transfers/escalations, coordination requests, overlap review, alerts, reports, and CSV export.
+- Case-scoped supporting-document upload and short-lived signed download are implemented behind the optional private-storage migration; do not use until that migration and role checks are verified in the target project.
 - Rule-based relationship suggestions use shared institution records and cross-bureau cases as a review cue. This does not determine that complaints are duplicates.
 - Optional server-side semantic suggestions use OpenAI `text-embedding-3-small` embeddings. Similarity is raw cosine similarity, and every suggestion requires human review.
 - Website Help Assistant is deterministic local FAQ matching; it does not use a generative AI provider or complaint data.
@@ -35,7 +36,7 @@ There is no lint script configured in `package.json`.
 
 ## Setup and deployment
 
-See [MANUAL_SETUP.md](MANUAL_SETUP.md), [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), and [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md). Database migrations are in `supabase/migrations/` and must be reviewed/applied to the intended Supabase project in order. No production migration, seed, deployment, or account provisioning is performed by this repository's local development command.
+See [MANUAL_SETUP.md](MANUAL_SETUP.md), [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md), and [docs/DEMO_WALKTHROUGH.md](docs/DEMO_WALKTHROUGH.md). Database migrations are in `supabase/migrations/` and must be reviewed/applied to the intended Supabase project in order. The dashboard RPC was manually applied and verified through user-provided SQL Editor evidence; no seed, deployment, or account provisioning is performed by this repository's local development command.
 
 ## Security and AI matching
 

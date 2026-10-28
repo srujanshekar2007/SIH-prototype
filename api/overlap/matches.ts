@@ -43,9 +43,16 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
     const { data: auth, error: authError } = await callerClient.auth.getUser(token);
     if (authError || !auth.user) return reply(res, 401, { code: 'unauthenticated', message: 'Your session is invalid or expired. Sign in again.' });
 
-    const { data: profile, error: profileError } = await callerClient.from('profiles')
+    let { data: profile, error: profileError } = await callerClient.from('profiles')
       .select('id,role,is_admin,active,bureau_id,can_manage_bureau')
       .eq('id', auth.user.id).maybeSingle();
+    if (isMissingBureauPermissionColumn(profileError)) {
+      const legacyProfile = await callerClient.from('profiles')
+        .select('id,role,is_admin,active,bureau_id')
+        .eq('id', auth.user.id).maybeSingle();
+      profile = legacyProfile.data ? { ...legacyProfile.data, can_manage_bureau: null } : null;
+      profileError = legacyProfile.error;
+    }
     if (profileError) return reply(res, 503, { code: 'profile_unavailable', message: 'Could not verify the active profile and permissions.' });
     const workflowRole = ['pgrc_officer', 'rb_officer', 'bureau_officer'].includes(profile?.role);
     if (!profile?.active || !(profile.is_admin === true || workflowRole)) {
@@ -213,6 +220,16 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
 function header(req: RequestLike, name: string): string | undefined {
   const value = req.headers[name] ?? req.headers[name.toLowerCase()];
   return Array.isArray(value) ? value[0] : value;
+}
+
+function isMissingBureauPermissionColumn(error: any): boolean {
+  if (!error) return false;
+  const details = [error.message, error.details, error.hint].filter(Boolean).join(' ').toLowerCase();
+  return details.includes('can_manage_bureau') && (
+    error.code === '42703' || error.code === 'PGRST204'
+    || /column.{0,80}(does not exist|not found|schema cache)/.test(details)
+    || /could not find.{0,80}column/.test(details)
+  );
 }
 
 function reply(res: ResponseLike, status: number, body: unknown) {

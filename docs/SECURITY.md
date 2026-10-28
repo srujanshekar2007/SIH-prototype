@@ -18,7 +18,7 @@ When semantic matching is explicitly enabled, the function sends subject/categor
 
 ## Known security gaps requiring review
 
-- No private Supabase Storage bucket, object policies, signed download flow, upload validation, or malware scanning is configured. `supporting_documents` stores metadata only; do not use it as evidence that files are protected.
+- Private case-scoped upload/download code and migration `202610280003_private_supporting_documents.sql` are present, but the migration is not live-verified. Until applied and tested with actual role accounts, do not upload real evidence. The flow allows PDF/JPEG/PNG up to 10 MiB, uses signed downloads, audits uploads, and has no deletion UI. Malware scanning is not implemented.
 - No in-app account provisioning. Use a trusted administrator process; do not enable public signup or self-assigned roles.
 - No independent production security review or live RLS test has been performed from this workspace.
 - Audit UI and audit event coverage are limited to implemented SQL triggers and an admin recent-events summary; verify coverage against operational policy.

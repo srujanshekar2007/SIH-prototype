@@ -16,7 +16,7 @@ Server-only variables for optional AI matching: `SUPABASE_URL`, `SUPABASE_ANON_K
 
 Review and apply migrations in lexical order using an authorized operator and the intended project ref. Confirm the linked project before `supabase db push`. The semantic route requires `202610270001_ai_semantic_overlap.sql`; app login and rule matching do not require that optional migration. Auth URL allowlists must include the correct app origins. Use separate dev/test and production projects.
 
-No live migration was applied, no Vercel settings were inspected via authenticated project access, and no deployment was initiated from this workspace.
+The user-provided SQL Editor screenshots show the selected `SIH-prototype` production project accepted `202610280001_dashboard_relationship_rpcs.sql`, then returned one JSON row from an authenticated call to `public.dashboard_relationship_summary()`. The same project initially lacked `profiles.can_manage_bureau`; `202610280002_validate_transfer_destination.sql` repairs that scope field and transfer guard but has not been verified as applied. A direct live request to `https://sih-prototype-ruddy.vercel.app/api/overlap/matches` returned JSON HTTP 405 with `Allow: POST` for GET, and JSON HTTP 401 for an unauthenticated POST. The home page returned HTTP 200. Authorized POST, provider configuration, persistence, and deployed-commit identity were not verified; no deployment was initiated from this workspace.
 
 ## Dashboard relationship summary is missing
 
@@ -36,11 +36,16 @@ Then retry the dashboard summary. This notification refreshes the API schema cac
 
 ## Verification checklist
 
-1. Confirm the Vercel build logs show the Vite build and the `api/overlap/matches` function.
+1. Confirm the Vercel build logs show the Vite build and the `api/overlap/matches` function after deploying the reviewed working tree.
 2. `GET https://<deployment>/api/overlap/matches` should return JSON HTTP 405, not HTML/SPA content.
 3. An unauthenticated `POST` should return JSON 401. Use a protected test account for authorized POST checks; do not paste bearer tokens into tickets or logs.
 4. With AI unconfigured, an authorized POST must return a clear JSON 503 and no fabricated suggestions.
 5. With approved server configuration and the migration applied, test fictional complaint cases with separate role accounts and verify suggestions/review persistence while original complaint rows remain unchanged.
 6. Verify Supabase Auth redirects, RLS scope, and role-specific pages in the actual deployment.
 
-Production route status is unknown until this checklist is executed against the deployed revision. A local build does not prove production deployment.
+The deployed route's method guard and unauthenticated response have been verified. Authorized POST behavior and the currently deployed commit remain unverified; a local build does not prove the changed working tree is deployed.
+
+## Additional reviewed migrations
+
+- `202610280002_validate_transfer_destination.sql` adds the missing nullable `profiles.can_manage_bureau` field with a false default for new profiles, repairs its helper while preserving legacy NULL behavior, and requires transfers/escalations to target a different active configured Bureau/Cell. Review and apply after confirming the live migration state.
+- `202610280003_private_supporting_documents.sql` creates/configures a private case-scoped Storage bucket, insert/read policies, metadata checks, and an upload audit event. Apply only if private evidence storage is intended and approved. It does not create demo files or enable public access.
