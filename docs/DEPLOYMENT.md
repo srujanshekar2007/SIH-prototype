@@ -18,6 +18,22 @@ Review and apply migrations in lexical order using an authorized operator and th
 
 No live migration was applied, no Vercel settings were inspected via authenticated project access, and no deployment was initiated from this workspace.
 
+## Dashboard relationship summary is missing
+
+If the dashboard reports `PGRST202` or says `public.dashboard_relationship_summary()` is missing from the schema cache, check the intended Supabase project's migration history first. The function is created by `supabase/migrations/202610270002_action_schema_and_relationship_summary.sql`; apply pending migrations in lexical order using the authorized database change process. If that migration is already applied and the function definition exists, refresh PostgREST's schema cache in the Supabase SQL Editor:
+
+```sql
+select to_regprocedure('public.dashboard_relationship_summary()');
+```
+
+If this returns `NULL`, the function is absent from the database; apply the migration rather than only reloading the cache. If it returns `dashboard_relationship_summary()` and the migration is recorded, run:
+
+```sql
+NOTIFY pgrst, 'reload schema';
+```
+
+Then retry the dashboard summary. This notification refreshes the API schema cache; it does not create the function or apply a migration.
+
 ## Verification checklist
 
 1. Confirm the Vercel build logs show the Vite build and the `api/overlap/matches` function.

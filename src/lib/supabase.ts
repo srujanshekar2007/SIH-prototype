@@ -55,7 +55,18 @@ export type DashboardRelationshipSummary = {
 export async function fetchDashboardRelationshipSummary(client: SupabaseClient) {
   try {
     const { data, error } = await client.rpc('dashboard_relationship_summary');
-    if (error) return { data: null as DashboardRelationshipSummary | null, error };
+    if (error) {
+      const details = [error.code, error.message, error.details, error.hint].filter(Boolean).join(' ').toLowerCase();
+      if (error.code === 'PGRST202' || details.includes('dashboard_relationship_summary') && details.includes('schema cache')) {
+        return {
+          data: null as DashboardRelationshipSummary | null,
+          error: new Error(
+            'Supabase cannot find dashboard_relationship_summary. Check whether migration 202610270002_action_schema_and_relationship_summary.sql is applied and the function exists. If the function exists, run NOTIFY pgrst, \'reload schema\'; in the Supabase SQL Editor.',
+          ),
+        };
+      }
+      return { data: null as DashboardRelationshipSummary | null, error };
+    }
     const value = data as Partial<DashboardRelationshipSummary> | null;
     if (!value || !Number.isSafeInteger(value.pending_count) || Number(value.pending_count) < 0
       || !Array.isArray(value.case_ids) || !value.case_ids.every((id) => typeof id === 'string')

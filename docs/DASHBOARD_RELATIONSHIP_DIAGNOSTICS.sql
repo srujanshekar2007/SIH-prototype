@@ -10,12 +10,16 @@ where version in ('202610270002', '202610270003')
 order by version;
 
 -- 2) Inspect the deployed function definition and supporting indexes.
-select pg_get_functiondef('public.dashboard_relationship_summary()'::regprocedure);
+select to_regprocedure('public.dashboard_relationship_summary()') as resolved_function,
+  case
+    when to_regprocedure('public.dashboard_relationship_summary()') is null then 'Function is absent from the database.'
+    else pg_get_functiondef(to_regprocedure('public.dashboard_relationship_summary()'))
+  end as function_definition;
 
 select p.prosecdef as security_definer,
   pg_get_userbyid(p.proowner) as function_owner
 from pg_proc p
-where p.oid = 'public.dashboard_relationship_summary()'::regprocedure;
+where p.oid = to_regprocedure('public.dashboard_relationship_summary()');
 
 select tablename, indexname, indexdef
 from pg_indexes
@@ -28,6 +32,8 @@ order by tablename, indexname;
 -- postgres; do not SET ROLE here, because the function is SECURITY DEFINER and
 -- the direct plan below should use the function owner's table-access behavior.
 -- ROLLBACK clears the local JWT claim settings.
+-- Run sections 3-4 only if section 2 resolves the function; otherwise apply
+-- the missing migration before running function diagnostics.
 begin;
 set local statement_timeout = '15s';
 select set_config('request.jwt.claim.sub', 'PROFILE_UUID', true);
