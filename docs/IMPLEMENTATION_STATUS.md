@@ -24,6 +24,13 @@ Last repository audit: 2026-10-28. This report distinguishes local implementatio
 
 The user ran the dashboard RPC migration in the Supabase SQL Editor for the selected `SIH-prototype` production project. A subsequent authenticated SQL query using the user's profile UUID returned one JSON row from `public.dashboard_relationship_summary()`. The output was visually truncated in the grid, but the RPC executed successfully. This verifies the summary function only; it does not verify the paginated queue RPC, all historical migrations, RLS across roles, AI persistence, Storage, or the Vercel endpoint.
 
+## Known issue audit
+
+- `Could not find function public.dashboard_relationship_summary`: the user screenshot first showed the RPC missing, then showed a successful result after the dashboard RPC migration was run. The local client gives a migration/schema-cache diagnostic for this response. Current live signature and PostgREST cache state should still be checked with `docs/DASHBOARD_RELATIONSHIP_DIAGNOSTICS.sql`.
+- `column can_manage_bureau does not exist`: the user screenshot directly confirmed this column was absent in the selected database. Migration `202610280001_dashboard_relationship_rpcs.sql` uses JSON profile access to tolerate that older schema; `202610280002_validate_transfer_destination.sql` adds the optional column. The latter remains a prepared local migration, not a verified live change.
+- `Could not find the 'assigned_to' column of 'case_actions' in the schema cache`: historical migrations `202610240002_role_dashboard_scope.sql` and `202610240005_scope_bureau_officer_role.sql` define a trigger that reads `new.assigned_to`. Migration `202610270002_action_schema_and_relationship_summary.sql` replaces it with an assignment RPC that writes `complaints.assigned_officer_id` and action history without that field. This is a repository-supported migration-drift explanation, but the deployed trigger definition is unknown until the read-only diagnostic script is run.
+- `overlap reviews: canceling statement due to statement timeout`: the client preserves this as a failed queue request; it does not convert it to an empty queue. The queue RPC is filtered and paginated in SQL and has relevant indexes in the migration set, but no live EXPLAIN plan or timing evidence is available. The updated diagnostic script checks the page RPC signature and times a bounded call. Do not add indexes based on this error alone.
+
 ## Change control
 
 Starting branch: `main`. Starting commit: `ede997e42080c94fa00e07f501669e76acc17c98`. No commit, push, merge, or deployment was performed during this audit. Review the working-tree diff before applying the new migrations or releasing the frontend.
