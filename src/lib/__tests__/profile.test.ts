@@ -24,6 +24,37 @@ describe('authenticated profile lookup', () => {
     expect(mock.eq).toHaveBeenCalledWith('id', authUid);
   });
 
+  it('loads an automatically provisioned public profile as active but unprivileged', async () => {
+    const profile = { id: authUid, role: 'public_user', is_admin: false, active: true, bureau_id: null };
+    const mock = mockClient([{ data: profile, error: null }]);
+
+    const result = await fetchUserProfile(mock.client, authUid);
+
+    expect(result.data).toEqual(profile);
+    expect(result.data).toMatchObject({ role: 'public_user', active: true, is_admin: false, bureau_id: null });
+    expect(mock.eq).toHaveBeenCalledWith('id', authUid);
+  });
+
+  it('preserves an existing active officer role and Bureau scope', async () => {
+    const profile = { id: authUid, role: 'pgrc_officer', is_admin: false, active: true, bureau_id: 'bureau-1' };
+    const mock = mockClient([{ data: profile, error: null }]);
+
+    const result = await fetchUserProfile(mock.client, authUid);
+
+    expect(result.data).toEqual(profile);
+    expect(result.data).toMatchObject({ role: 'pgrc_officer', active: true, is_admin: false, bureau_id: 'bureau-1' });
+  });
+
+  it('does not fabricate or activate a profile when the Auth UID has no row', async () => {
+    const mock = mockClient([{ data: null, error: null }]);
+
+    const result = await fetchUserProfile(mock.client, authUid);
+
+    expect(result.data).toBeNull();
+    expect(result.error).toBeNull();
+    expect(mock.eq).toHaveBeenCalledWith('id', authUid);
+  });
+
   it('retries without the new optional column when the migration is not applied', async () => {
     const profile = { id: authUid, role: 'administrator', is_admin: true, active: true };
     const mock = mockClient([
