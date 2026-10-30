@@ -59,16 +59,24 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
       return reply(res, 403, { code: 'forbidden', message: 'An active workflow-authorized profile is required. Read-only AICTE oversight accounts cannot generate suggestions.' });
     }
 
-    if (!process.env.OPENAI_API_KEY) return reply(res, 503, { code: 'ai_not_configured', message: 'AI matching is not configured. The existing rule-based Find suggestions action remains available.' });
+    const caseGraphUrl = process.env.CASEGRAPH_MATCHING_URL;
+    const caseGraphKey = process.env.CASEGRAPH_API_KEY;
+    const caseGraphConfigured = Boolean(caseGraphUrl && caseGraphKey);
+    if (Boolean(caseGraphUrl) !== Boolean(caseGraphKey)) {
+      return reply(res, 503, { code: 'casegraph_misconfigured', message: 'The semantic matching service is not fully configured. Existing rule-based suggestions remain available.' });
+    }
+    if (!caseGraphConfigured && !process.env.OPENAI_API_KEY) return reply(res, 503, { code: 'ai_not_configured', message: 'AI matching is not configured. The existing rule-based Find suggestions action remains available.' });
     if (process.env.AI_EXTERNAL_COMPLAINT_TEXT_APPROVED !== 'true') {
-      return reply(res, 503, { code: 'ai_privacy_not_approved', message: 'An administrator must explicitly approve sending complaint subject, category, and description to the configured external embedding provider.' });
+      return reply(res, 503, { code: 'ai_privacy_not_approved', message: 'An administrator must explicitly approve sending complaint subject, category, and description to the configured external matching provider.' });
     }
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!serviceKey) return reply(res, 503, { code: 'server_not_configured', message: 'The server-only Supabase service credential is not configured. It is used only after caller authorization and is never sent to the browser.' });
     adminClient = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
-    const model = process.env.OPENAI_EMBEDDING_MODEL || matching.EMBEDDING_MODEL;
+    const model = caseGraphConfigured
+      ? matching.CASEGRAPH_MODEL_ID
+      : process.env.OPENAI_EMBEDDING_MODEL || matching.EMBEDDING_MODEL;
 
     if (req.body !== undefined && req.body !== null && (typeof req.body !== 'object' || Array.isArray(req.body))) {
       return reply(res, 400, { code: 'invalid_request', message: 'Send the matching options as a JSON object.' });
@@ -106,7 +114,7 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
     const existing = new Map((existingRows || []).map((row: any) => [matching.relationshipKey(row.source_case_id, row.target_case_id), row]));
     let pairs;
     try {
-      pairs = matching.buildCandidatePairs(actorRows, existing, model, matching.MAX_CANDIDATE_PAIRS, threshold);
+      pairs = matching.buildCandidatePairs(actorRows, existing, model, matching.MAX_CANDIDATE_PAIRS, threshold, caseGraphConfigured);
     } catch (error) {
       return reply(res, 413, { code: 'candidate_limit', message: error instanceof Error ? error.message : 'The candidate limit was exceeded.' });
     }
@@ -124,6 +132,33 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
     const relevant = new Map<string, ComplaintForMatching>();
     for (const pair of pairs) { relevant.set(pair.source.id, pair.source); relevant.set(pair.target.id, pair.target); }
     const candidateRows = [...relevant.values()];
+    let suggestions: ReturnType<typeof matching.makeSuggestion>[];
+    let cachedCount = 0;
+
+    if (caseGraphConfigured) {
+      const caseGraph = await import('../../server/casegraph-client');
+      if (candidateRows.length > caseGraph.MAX_CASEGRAPH_CASES_PER_REQUEST) {
+        return reply(res, 413, { code: 'casegraph_batch_limit', message: `CaseGraph matching supports at most ${caseGraph.MAX_CASEGRAPH_CASES_PER_REQUEST} distinct candidate complaints per run. Narrow the authorized institution scope; existing rule-based suggestions remain available.` });
+      }
+      let scores: Map<string, number>;
+      try {
+        scores = await caseGraph.requestCaseGraphScores(pairs, caseGraphUrl!, caseGraphKey!);
+      } catch (error) {
+        if (error instanceof caseGraph.CaseGraphServiceError && error.kind === 'timeout') {
+          return reply(res, 504, { code: 'casegraph_timeout', message: 'The semantic matching service timed out. No relationship suggestions were changed.' });
+        }
+        if (error instanceof caseGraph.CaseGraphServiceError && error.kind === 'invalid_response') {
+          return reply(res, 502, { code: 'casegraph_invalid_response', message: 'The semantic matching service returned invalid results. No suggestions were changed.' });
+        }
+        return reply(res, 502, { code: 'casegraph_unavailable', message: 'The semantic matching service is unavailable. No suggestions were changed; the existing rule-based action remains available.' });
+      }
+      suggestions = pairs.map((pair) => matching.makeSuggestionFromScore(
+        pair,
+        scores.get(matching.relationshipKey(pair.source.id, pair.target.id))!,
+        threshold,
+        model,
+      ));
+    } else {
     const cache = new Map<string, { content_hash: string; model: string; embedding: number[] }>();
     for (let i = 0; i < candidateRows.length; i += 100) {
       const ids = candidateRows.slice(i, i + 100).map((row) => row.id);
@@ -152,11 +187,11 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
       });
     }
 
-    const cachedCount = vectors.size;
+    cachedCount = vectors.size;
     for (let i = 0; i < missing.length; i += matching.EMBEDDING_BATCH_SIZE) {
       const batch = missing.slice(i, i + matching.EMBEDDING_BATCH_SIZE);
       let orderedVectors: number[][];
-      try { orderedVectors = await matching.requestEmbeddingBatch(batch.map((entry) => entry.text), process.env.OPENAI_API_KEY, model); }
+      try { orderedVectors = await matching.requestEmbeddingBatch(batch.map((entry) => entry.text), process.env.OPENAI_API_KEY!, model); }
       catch (error) {
         if (error instanceof matching.EmbeddingProviderError && error.kind === 'timeout') return reply(res, 504, { code: 'provider_timeout', message: 'The embedding provider timed out. No relationship suggestions were changed.' });
         if (error instanceof matching.EmbeddingProviderError && error.kind === 'rate_limit') return reply(res, 503, { code: 'provider_rate_limited', message: 'The embedding provider is rate-limiting requests. Wait briefly and retry.' });
@@ -175,7 +210,8 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
       for (let index = 0; index < batch.length; index += 1) vectors.set(batch[index].row.id, orderedVectors[index]);
     }
 
-    const suggestions = pairs.map((pair) => matching.makeSuggestion(pair, vectors, threshold));
+    suggestions = pairs.map((pair) => matching.makeSuggestion(pair, vectors, threshold, model));
+    }
     const persisted = suggestions.filter((suggestion) => {
       const existingRow = existing.get(suggestion.key);
       return suggestion.shouldInsert || existingRow?.review_status === 'pending';
@@ -183,7 +219,7 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
       source_case_id: suggestion.source.id,
       target_case_id: suggestion.target.id,
       semantic_similarity: suggestion.similarity,
-      semantic_model: model,
+      semantic_model: suggestion.model,
       algorithm_version: matching.MATCHING_VERSION,
       matching_fields: suggestion.matchingFields,
       match_reasons: suggestion.reasons,

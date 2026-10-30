@@ -4,11 +4,11 @@ An administrative prototype for authorized officials to track institution-relate
 
 ## Current capabilities
 
-- Supabase Auth email/password login with provisioned accounts; public registration and self-selected roles are not provided.
+- Supabase Auth email/password login, public self-registration, email verification, password recovery, and a database-triggered least-privilege `public_user` profile. See [authentication setup](docs/AUTHENTICATION.md); its migrations are not yet applied to production.
 - Role-scoped dashboard, complaint registry, institution records, workflow/action history, transfers/escalations, coordination requests, overlap review, alerts, reports, and CSV export.
 - Case-scoped supporting-document upload and short-lived signed download are implemented behind the optional private-storage migration; do not use until that migration and role checks are verified in the target project.
 - Rule-based relationship suggestions use shared institution records and cross-bureau cases as a review cue. This does not determine that complaints are duplicates.
-- Optional server-side semantic suggestions use OpenAI `text-embedding-3-small` embeddings. Similarity is raw cosine similarity, and every suggestion requires human review.
+- Optional server-side semantic suggestions use OpenAI `text-embedding-3-small` or the separate CaseGraph MiniLM service when configured. Similarity is raw cosine similarity, and every suggestion requires human review.
 - Website Help Assistant is deterministic local FAQ matching; it does not use a generative AI provider or complaint data.
 
 ## Local development

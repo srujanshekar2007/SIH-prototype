@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 export const EMBEDDING_MODEL = 'text-embedding-3-small';
+export const CASEGRAPH_MODEL_ID = 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2';
 export const MATCHING_VERSION = 'institution-blocked-cosine-v1';
 export const MAX_AUTHORIZED_CASES = 500;
 export const MAX_CANDIDATE_PAIRS = 25000;
@@ -40,6 +41,7 @@ export type ComplaintForMatching = {
 export type CandidatePair = { source: ComplaintForMatching; target: ComplaintForMatching; key: string };
 export type PersistedSuggestion = CandidatePair & {
   similarity: number;
+  model: string;
   sourceTextHash: string;
   targetTextHash: string;
   matchingFields: string[];
@@ -142,6 +144,7 @@ export function buildCandidatePairs(
   model: string,
   limit = MAX_CANDIDATE_PAIRS,
   threshold?: number,
+  allowSameBureau = false,
 ): CandidatePair[] {
   const institutions = new Map<string, ComplaintForMatching[]>();
   for (const row of rows) {
@@ -156,7 +159,7 @@ export function buildCandidatePairs(
       for (let j = i + 1; j < group.length; j += 1) {
         const first = group[i];
         const second = group[j];
-        if (first.bureau_id === second.bureau_id) continue;
+        if (!allowSameBureau && first.bureau_id === second.bureau_id) continue;
         const source = first.id < second.id ? first : second;
         const target = source === first ? second : first;
         const key = relationshipKey(source.id, target.id);
@@ -192,13 +195,15 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   return Math.max(-1, Math.min(1, dot / Math.sqrt(normA * normB)));
 }
 
-export function makeSuggestion(pair: CandidatePair, vectors: Map<string, number[]>, threshold: number): PersistedSuggestion {
+export function makeSuggestion(pair: CandidatePair, vectors: Map<string, number[]>, threshold: number, model = EMBEDDING_MODEL): PersistedSuggestion {
   const sourceText = complaintEmbeddingText(pair.source)!;
   const targetText = complaintEmbeddingText(pair.target)!;
   const similarity = cosineSimilarity(vectors.get(pair.source.id) || [], vectors.get(pair.target.id) || []);
   const reasons = [
     'Same canonical institution record',
-    `Different handling units: ${pair.source.bureaus?.name || 'Bureau/Cell'} and ${pair.target.bureaus?.name || 'Bureau/Cell'}`,
+    pair.source.bureau_id === pair.target.bureau_id
+      ? `Same handling unit: ${pair.source.bureaus?.name || 'Bureau/Cell'}`
+      : `Different handling units: ${pair.source.bureaus?.name || 'Bureau/Cell'} and ${pair.target.bureaus?.name || 'Bureau/Cell'}`,
     `Semantic complaint-text cosine similarity ${similarity.toFixed(3)}`,
   ];
   if (pair.source.category && pair.target.category && pair.source.category !== pair.target.category) {
@@ -207,12 +212,51 @@ export function makeSuggestion(pair: CandidatePair, vectors: Map<string, number[
   return {
     ...pair,
     similarity,
+    model,
     sourceTextHash: textHash(sourceText),
     targetTextHash: textHash(targetText),
     matchingFields: ['subject', 'category', 'description', 'institution_id', 'bureau_id'],
     reasons,
     explanation: {
       method: 'Cosine similarity between OpenAI text embeddings of subject, category, and description.',
+      scoreMeaning: 'Raw cosine similarity in [-1, 1]; it is not a probability or a verified duplicate score.',
+      threshold,
+      humanReviewRequired: true,
+      contextualDifferences: {
+        category: pair.source.category === pair.target.category ? 'same' : 'different or missing',
+        status: pair.source.status === pair.target.status ? 'same' : 'different',
+        receivedDate: [pair.source.received_at, pair.target.received_at],
+      },
+    },
+    shouldInsert: similarity >= threshold,
+  };
+}
+
+/** Build the same review-only record from a score returned by the optional CaseGraph service. */
+export function makeSuggestionFromScore(pair: CandidatePair, similarity: number, threshold: number, model: string): PersistedSuggestion {
+  if (!Number.isFinite(similarity) || similarity < -1 || similarity > 1) throw new Error('The semantic matcher returned an invalid score.');
+  const sourceText = complaintEmbeddingText(pair.source)!;
+  const targetText = complaintEmbeddingText(pair.target)!;
+  const reasons = [
+    'Same canonical institution record',
+    pair.source.bureau_id === pair.target.bureau_id
+      ? `Same handling unit: ${pair.source.bureaus?.name || 'Bureau/Cell'}`
+      : `Different handling units: ${pair.source.bureaus?.name || 'Bureau/Cell'} and ${pair.target.bureaus?.name || 'Bureau/Cell'}`,
+    `Semantic complaint-text cosine similarity ${similarity.toFixed(3)}`,
+  ];
+  if (pair.source.category && pair.target.category && pair.source.category !== pair.target.category) {
+    reasons.push(`Categories differ (${pair.source.category} / ${pair.target.category}); retained for review`);
+  }
+  return {
+    ...pair,
+    similarity,
+    model,
+    sourceTextHash: textHash(sourceText),
+    targetTextHash: textHash(targetText),
+    matchingFields: ['subject', 'category', 'description', 'institution_id', 'bureau_id'],
+    reasons,
+    explanation: {
+      method: `Cosine similarity between ${model} multilingual sentence embeddings of subject, category, and description.`,
       scoreMeaning: 'Raw cosine similarity in [-1, 1]; it is not a probability or a verified duplicate score.',
       threshold,
       humanReviewRequired: true,

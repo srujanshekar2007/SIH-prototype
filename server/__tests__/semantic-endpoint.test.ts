@@ -130,6 +130,48 @@ describe('AI overlap endpoint authorization/configuration', () => {
     expect(mockClients.createClient).toHaveBeenCalledTimes(2);
   });
 
+  it('uses authenticated CaseGraph scores for same-institution candidates and persists review-only suggestions', async () => {
+    configureServer();
+    vi.stubEnv('OPENAI_API_KEY', '');
+    vi.stubEnv('CASEGRAPH_MATCHING_URL', 'https://matching.example');
+    vi.stubEnv('CASEGRAPH_API_KEY', 'casegraph-server-secret');
+    const source = {
+      id: '00000000-0000-4000-8000-000000000001', case_number: 'CASE-1', institution_id: 'institution',
+      category: 'scholarship', subject: 'Scholarship payment is missing for this student',
+      description: 'The approved scholarship money has not arrived in the student account this term.', status: 'Pending',
+      bureau_id: 'bureau-a', assigned_officer_id: null, received_at: '2026-10-01', bureaus: { name: 'PGRC' },
+    };
+    const target = { ...source, id: '00000000-0000-4000-8000-000000000002', case_number: 'CASE-2', bureau_id: 'bureau-b', bureaus: { name: 'RB' } };
+    const profileQuery: any = { select: () => profileQuery, eq: () => profileQuery, maybeSingle: async () => ({ data: { id: 'official', role: 'rb_officer', is_admin: true, active: true, bureau_id: null, can_manage_bureau: true }, error: null }) };
+    const complaintQuery: any = { select: () => complaintQuery, order: () => complaintQuery, range: async () => ({ data: [source, target], error: null }) };
+    const relationshipQuery: any = { select: async () => ({ data: [], error: null }) };
+    const caller = {
+      auth: { getUser: async () => ({ data: { user: { id: 'official' } }, error: null }) },
+      from: (table: string) => table === 'profiles' ? profileQuery : table === 'complaints' ? complaintQuery : relationshipQuery,
+    };
+    const persist = vi.fn(async (_fn: string, args: any) => ({ data: args.suggestions.length, error: null }));
+    mockClients.createClient.mockReturnValueOnce(caller).mockReturnValueOnce({ rpc: persist });
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer casegraph-server-secret');
+      const request = JSON.parse(String(init?.body));
+      expect(request.complaints).toHaveLength(2);
+      expect(JSON.stringify(request)).not.toContain('CASE-1');
+      return Response.json({
+        model_id: 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
+        matches: [{ complaint_a_id: source.id, complaint_b_id: target.id, similarity: 0.87 }],
+      });
+    });
+    vi.stubGlobal('fetch', fetcher);
+
+    const result = await run({ authorization: 'Bearer signed-in-token' });
+
+    expect(result.code).toBe(200);
+    expect(result.body).toMatchObject({ generated: 1, model: 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2' });
+    expect(persist).toHaveBeenCalledOnce();
+    expect(persist.mock.calls[0][1].suggestions[0]).toMatchObject({ semantic_model: 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2', should_insert: true });
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
   it('does not expose client initialization exceptions in the API response', async () => {
     configureServer();
     mockClients.createClient.mockImplementationOnce(() => { throw new Error('sensitive runtime detail'); });

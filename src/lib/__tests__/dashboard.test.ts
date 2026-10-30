@@ -9,6 +9,11 @@ const cases = [
 ] as CaseRow[];
 
 describe('role dashboard scope',()=>{
+  it('keeps automatically registered public users outside confidential case dashboards',()=>{
+    const publicProfile={id:'public-user',role:'public_user',is_admin:false,active:true,bureau_id:null};
+    expect(dashboardKind(publicProfile)).toBe('denied');
+    expect(casesForDashboard(cases,dashboardKind(publicProfile),'public-user',publicProfile)).toEqual([]);
+  });
   it('distinguishes explicit administrators, bureau managers, assigned officers, and AICTE oversight',()=>{
     expect(dashboardKind({active:true,is_admin:true,role:'aicte_official'})).toBe('administrator');
     expect(dashboardKind({active:true,is_admin:false,role:'pgrc_officer',can_manage_bureau:true})).toBe('bureau');

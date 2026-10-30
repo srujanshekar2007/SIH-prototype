@@ -82,6 +82,13 @@ describe('semantic overlap matching boundaries', () => {
     expect(suggestion.shouldInsert).toBe(false);
   });
 
+  it('allows same-bureau CaseGraph candidates only when explicitly enabled', () => {
+    const a = complaint({ id: 'same-unit-a' });
+    const b = complaint({ id: 'same-unit-b' });
+    expect(buildCandidatePairs([a, b], new Map(), 'text-embedding-3-small')).toEqual([]);
+    expect(buildCandidatePairs([a, b], new Map(), 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2', undefined, undefined, true)).toHaveLength(1);
+  });
+
   it('does not embed missing, empty, or very short complaint text', () => {
     expect(complaintEmbeddingText(complaint({ subject: null, category: null, description: null }))).toBeNull();
     expect(complaintEmbeddingText(complaint({ subject: 'Late fee', category: null, description: '' }))).toBeNull();

@@ -1,6 +1,6 @@
 # Role-based verification matrix
 
-Use provisioned test accounts in a dedicated non-production Supabase project. `profiles.id` must match the Auth UUID. Never enable public signup or grant roles from the browser. This is a planned manual test matrix, not evidence that live role tests have been run.
+Use a dedicated non-production Supabase project. `profiles.id` must match the Auth UUID. Public signup may be tested only after reviewing and applying migrations `202610310002` and `202610310003` in that test project; it must always provision `public_user`. Never grant roles from the browser. This is a planned manual test matrix, not evidence that live role tests have been run.
 
 | Profile | Intended scope from current code | Read checks | Mutation checks |
 |---|---|---|---|

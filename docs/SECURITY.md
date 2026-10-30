@@ -5,7 +5,7 @@
 - Supabase Auth supplies the identity. The application requires an active `profiles` row keyed to the Auth user UUID.
 - Database RLS uses helpers such as `is_admin()`, `current_role()`, `current_bureau()`, `can_access_case()`, and `can_act_on_case()`. Bureau managers and assigned officers have different scopes; administrators require the designated admin flag.
 - Semantic matching validates the bearer token and active profile, fetches complaints with the caller JWT (RLS), checks action scope, and the persistence RPC independently checks actor permission and same-institution/different-bureau constraints.
-- Profile provisioning is a trusted manual operation. Public registration and client-side role selection are absent.
+- Optional public registration provisions only the fixed `public_user` role through a database trigger. Client metadata cannot choose roles or Bureau scope; privileged role assignment remains administrator-managed under RLS.
 - Action/transfer triggers create audit entries; `case_actions` and `audit_logs` are append-only. Audit reading is admin-only, but the UI currently shows only a recent summary rather than a searchable audit browser.
 
 ## Secrets
@@ -19,7 +19,7 @@ When semantic matching is explicitly enabled, the function sends subject/categor
 ## Known security gaps requiring review
 
 - Private case-scoped upload/download code and migration `202610280003_private_supporting_documents.sql` are present, but the migration is not live-verified. Until applied and tested with actual role accounts, do not upload real evidence. The flow allows PDF/JPEG/PNG up to 10 MiB, uses signed downloads, audits uploads, and has no deletion UI. Malware scanning is not implemented.
-- No in-app account provisioning. Use a trusted administrator process; do not enable public signup or self-assigned roles.
+- Public registration is implemented locally but requires review and application of migrations `202610310002` and `202610310003`, plus Supabase Auth URL/email configuration. Until then, do not advertise signup. Public users are routed to a restricted landing screen and must not receive complaint, institution, workflow, or administrative access.
 - No independent production security review or live RLS test has been performed from this workspace.
 - Audit UI and audit event coverage are limited to implemented SQL triggers and an admin recent-events summary; verify coverage against operational policy.
 - API uses a service-role key for the private embedding cache and restricted persistence RPC only after checks. This remains privileged server code and should receive code review and secret rotation controls.

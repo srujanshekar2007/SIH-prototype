@@ -24,4 +24,4 @@ Each complaint has one primary `bureau_id` and one optional `assigned_officer_id
 
 ## AI provider
 
-The active hosted provider is OpenAI Embeddings API, model `text-embedding-3-small`, 1536 dimensions. There is no Gemini integration and no generative summary provider in current code. See `AI_MATCHING.md` for privacy, scoring, limits, and configuration.
+The existing provider is OpenAI Embeddings API, model `text-embedding-3-small`, 1536 dimensions. An optional separate CaseGraph MiniLM inference service can be selected with server-only configuration; Vercel remains responsible for authentication, RLS-scoped complaint reads, and suggestion persistence. Neither provider generates text. See `AI_MATCHING.md` for privacy, scoring, limits, and configuration.

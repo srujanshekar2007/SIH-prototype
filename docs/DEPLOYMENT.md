@@ -10,11 +10,13 @@
 
 Build variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 
-Server-only variables for optional AI matching: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`, optional `OPENAI_EMBEDDING_MODEL`, optional `AI_SIMILARITY_THRESHOLD`, and `AI_EXTERNAL_COMPLAINT_TEXT_APPROVED`. Keep secrets out of `VITE_` variables. Configure scopes separately for Preview and Production; redeploy after changes.
+Server-only variables for optional AI matching: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, optional `OPENAI_API_KEY` and `OPENAI_EMBEDDING_MODEL`, optional `CASEGRAPH_MATCHING_URL` and `CASEGRAPH_API_KEY`, optional `AI_SIMILARITY_THRESHOLD`, and `AI_EXTERNAL_COMPLAINT_TEXT_APPROVED`. When both CaseGraph variables are set, the Vercel route uses CaseGraph MiniLM instead of OpenAI. Keep secrets out of `VITE_` variables. Configure scopes separately for Preview and Production; redeploy after changes. The CaseGraph Python service is separate from Vercel and must be independently hosted over HTTPS; no host has been provisioned by this change. See [the service guide](../matching-service/casegraph/README.md).
 
 ## Supabase
 
 Review and apply migrations in lexical order using an authorized operator and the intended project ref. Confirm the linked project before `supabase db push`. The semantic route requires `202610270001_ai_semantic_overlap.sql`; app login and rule matching do not require that optional migration. Auth URL allowlists must include the correct app origins. Use separate dev/test and production projects.
+
+Public registration additionally requires review and application of `202610310002_add_public_user_role.sql` followed by `202610310003_public_registration_profiles.sql`. Set the Supabase Auth Site URL and redirect allowlist for the exact portal origins, and confirm the email-confirmation and SMTP settings. Do not advertise signup before these migrations are applied in the intended project. Details: [authentication guide](./AUTHENTICATION.md).
 
 The user-provided SQL Editor screenshots show the selected `SIH-prototype` production project accepted `202610280001_dashboard_relationship_rpcs.sql`, then returned one JSON row from an authenticated call to `public.dashboard_relationship_summary()`. The same project initially lacked `profiles.can_manage_bureau`; `202610280002_validate_transfer_destination.sql` repairs that scope field and transfer guard but has not been verified as applied. A direct live request to `https://sih-prototype-ruddy.vercel.app/api/overlap/matches` returned JSON HTTP 405 with `Allow: POST` for GET, and JSON HTTP 401 for an unauthenticated POST. The home page returned HTTP 200. Authorized POST, provider configuration, persistence, and deployed-commit identity were not verified; no deployment was initiated from this workspace.
 
