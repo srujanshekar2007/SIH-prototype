@@ -356,3 +356,84 @@ th{font-size:10px}td{font-size:12px}.status-badge{font-size:10px;padding:5px 9px
 .assistant-status{justify-content:center;padding:0 12px 9px;font-size:9px}
 .bubble p{margin:0 0 7px}.bubble p:last-child{margin-bottom:0}.assistant-list-item{display:flex;gap:6px;margin:3px 0;align-items:flex-start}.assistant-list-item>span:first-child{flex:none;color:var(--accent-teal)}
 .typing-indicator{display:flex;align-items:center;gap:5px;min-width:52px;min-height:35px}.typing-indicator i{width:6px;height:6px;border-radius:50%;background:var(--muted-foreground);animation:assistant-typing 1s ease-in-out infinite}.typing-indicator i:nth-child(2){animation-delay:.15s}.typing-indicator i:nth-child(3){animation-delay:.3s}@keyframes assistant-typing{0%,60%,100%{transform:translateY(0);opacity:.45}30%{transform:translateY(-4px);opacity:1}}
+
+/* Responsive guardrails for narrow phones and tablet-width workspaces. */
+html,body,#root{width:100%;max-width:100%;overflow-x:clip}
+.app-shell,.main,.page-content,.panel,.chart-grid,.content-grid,.dashboard-grid,.dashboard-column{min-width:0}
+.table-wrap{max-width:100%;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+.table-wrap table{width:max-content;min-width:100%}
+.crumb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top-actions{flex:0 0 auto}
+.searchbox,.filterbox,.toolbar>*{min-width:0;max-width:100%}
+.searchbox input,.filterbox select{min-width:0;max-width:100%}
+.panel-head>div{min-width:0}
+.panel-head h2,.panel-head p,.page-heading h1,.page-heading p{overflow-wrap:anywhere}
+.chat-panel,.modal,.notification-panel{max-width:100vw}
+
+/* At tablet widths the persistent sidebar leaves too little room for the app. */
+@media (min-width:761px) and (max-width:900px){
+  .sidebar{inset:12px auto 12px 12px;width:min(286px,calc(100vw - 48px));border-radius:20px;transform:translateX(-110%);transition:transform .35s ease}
+  .sidebar.open{transform:translateX(0)}
+  .mobile-close{display:grid;place-items:center;margin-left:auto;width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:#d4dfeb}
+  .mobile-menu{display:grid}
+  .main{margin-left:0;padding:78px 0 0}
+  .main .topbar{position:fixed;left:12px;right:12px;top:10px;height:56px;padding:0 12px}
+  .page-content{padding:22px 18px 28px}
+  .scrim{position:fixed;inset:0;z-index:19;border:0;background:rgba(8,18,31,.42)}
+}
+
+@media (max-width:600px){
+  .page-heading{align-items:stretch;flex-direction:column;gap:12px}
+  .page-heading>.button,.page-heading>.button-group{width:100%}
+  .page-heading>.button-group{display:flex;flex-wrap:wrap}
+  .page-heading>.button-group>.button{flex:1 1 auto}
+  .toolbar{align-items:stretch}
+  .toolbar .searchbox{flex:1 1 100%;width:100%;min-width:0}
+  .toolbar .filterbox{flex:1 1 100%;width:100%}
+  .toolbar .filterbox select{width:100%}
+  .report-toolbar,.panel-head{flex-wrap:wrap}
+  .panel-head>.button,.panel-head>.text-button{flex:0 0 auto}
+  .coord-response{flex-wrap:wrap}
+  .coord-response .button{min-height:40px}
+  .modal-footer,.modal-actions{flex-wrap:wrap}
+  .modal-footer>.button,.modal-actions>.button{flex:1 1 130px}
+  .help-launcher{right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px))}
+  .toast{width:calc(100vw - 28px);justify-content:center;text-align:center;bottom:calc(12px + env(safe-area-inset-bottom,0px))}
+}
+
+@media (max-width:430px){
+  .topbar{gap:5px;padding-inline:7px}
+  .top-actions{gap:3px}
+  .topbar .icon-btn{width:36px;height:40px}
+  .crumb{font-size:10px}
+  .crumb span{margin-inline:4px}
+  .user-menu{gap:4px;padding-left:5px}
+  .user-menu>.icon-btn{width:32px}
+  .page-content{padding:18px 11px 26px}
+  .panel{padding:13px;border-radius:16px}
+  .dashboard-welcome{gap:12px}
+  .dashboard-welcome .refresh-meta{width:100%;min-width:0}
+  .role-kpis,.role-kpis.has-thirteen-cards,.report-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dashboard-status-chart{min-width:0}
+  .login-main{padding-left:16px;padding-right:16px}
+  .login-card{width:100%;max-width:440px;padding:20px}
+  .public-account-card{width:calc(100vw - 22px);padding:17px}
+  .notification-panel{right:-44px;width:calc(100vw - 18px)}
+}
+
+@media (max-width:360px){
+  .topbar{left:7px;right:7px}
+  .top-actions{gap:0}
+  .topbar .icon-btn{width:32px}
+  .avatar{width:28px;height:28px}
+  .user-menu{padding-left:3px}
+  .page-content{padding-inline:9px}
+  .kpi-grid,.role-kpis,.role-kpis.has-thirteen-cards,.report-kpis,.security-facts{grid-template-columns:minmax(0,1fr)}
+  .kpi-card{min-height:0;padding:13px}
+  .dashboard-status-chart{height:auto;min-height:180px;flex-wrap:wrap}
+  .dashboard-status-chart>.legend{width:100%;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .security-status{grid-template-columns:18px minmax(0,1fr)}
+  .security-status>*:last-child{grid-column:2}
+  .notice{padding:10px;gap:8px}
+  .button{min-height:40px}
+}
