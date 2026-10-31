@@ -349,3 +349,10 @@ th{font-size:10px}td{font-size:12px}.status-badge{font-size:10px;padding:5px 9px
 .user-management-table .active-switch input:disabled+.switch-track{opacity:.55;cursor:not-allowed}
 .scope-readonly{font-size:10px;color:var(--muted);text-transform:none}
 .scope-migration-note{margin:12px 4px 2px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--soft,rgba(100,120,140,.06));color:var(--muted);font-size:11px;line-height:1.5}
+
+.assistant-data-note,.assistant-status{position:relative;z-index:1;display:flex;align-items:flex-start;gap:7px;padding:8px 13px;color:var(--muted-foreground);font-size:10px;line-height:1.45}
+.assistant-data-note{border-bottom:1px solid var(--glass-edge);background:var(--glass-3)}
+.assistant-data-note svg,.assistant-status svg{flex:none;margin-top:1px;color:var(--accent-teal)}
+.assistant-status{justify-content:center;padding:0 12px 9px;font-size:9px}
+.bubble p{margin:0 0 7px}.bubble p:last-child{margin-bottom:0}.assistant-list-item{display:flex;gap:6px;margin:3px 0;align-items:flex-start}.assistant-list-item>span:first-child{flex:none;color:var(--accent-teal)}
+.typing-indicator{display:flex;align-items:center;gap:5px;min-width:52px;min-height:35px}.typing-indicator i{width:6px;height:6px;border-radius:50%;background:var(--muted-foreground);animation:assistant-typing 1s ease-in-out infinite}.typing-indicator i:nth-child(2){animation-delay:.15s}.typing-indicator i:nth-child(3){animation-delay:.3s}@keyframes assistant-typing{0%,60%,100%{transform:translateY(0);opacity:.45}30%{transform:translateY(-4px);opacity:1}}

@@ -9,7 +9,7 @@ An administrative prototype for authorized officials to track institution-relate
 - Case-scoped supporting-document upload and short-lived signed download are implemented behind the optional private-storage migration; do not use until that migration and role checks are verified in the target project.
 - Rule-based relationship suggestions use shared institution records and cross-bureau cases as a review cue. This does not determine that complaints are duplicates.
 - Optional server-side semantic suggestions use OpenAI `text-embedding-3-small` or the separate CaseGraph MiniLM service when configured. Similarity is raw cosine similarity, and every suggestion requires human review.
-- Website Help Assistant is deterministic local FAQ matching; it does not use a generative AI provider or complaint data.
+- AICTE Assistant is a deterministic, model-free local question-understanding and response engine. It uses the portal’s already-loaded RLS-authorized records for case answers and has no AI provider or inference dependency. See [local assistant documentation](docs/LOCAL_ASSISTANT.md).
 
 ## Local development
 
