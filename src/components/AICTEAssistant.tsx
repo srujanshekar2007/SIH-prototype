@@ -36,8 +36,8 @@ export default function AICTEAssistant(props:Props){
    setMessages(current=>[...current,{from:'assistant',text:result.text,caseNumbers:result.context.previousCaseNumbers}]);setBusy(false);
   },220);
  };
- return <div className={`chat-panel ${open?'is-open':''}`} role="dialog" aria-label="AICTE Assistant" aria-modal="false" aria-hidden={!open} inert={!open}>
-  <header><div className="chat-avatar"><Sparkles size={17}/></div><div><b>AICTE Assistant</b><small>Local, rule-based help · No AI model</small></div><button type="button" className="icon-btn chat-clear" aria-label="Clear conversation" title="Clear conversation" onClick={clear}><RefreshCw size={15}/></button><button type="button" className="icon-btn" aria-label="Close assistant" onClick={onClose}><X size={17}/></button></header>
+ return <div className={`chat-panel ${open?'is-open':''}`} role="dialog" aria-label="SYNAPSE Assistant" aria-modal="false" aria-hidden={!open} inert={!open}>
+  <header><div className="chat-avatar"><Sparkles size={17}/></div><div><b>SYNAPSE Assistant</b><small>Local, rule-based help · No AI model</small></div><button type="button" className="icon-btn chat-clear" aria-label="Clear conversation" title="Clear conversation" onClick={clear}><RefreshCw size={15}/></button><button type="button" className="icon-btn" aria-label="Close assistant" onClick={onClose}><X size={17}/></button></header>
   <div className="assistant-data-note"><ShieldCheck size={13}/><span>Case answers use records loaded for your signed-in role. Supabase RLS remains in force.</span></div>
   <div className="chat-messages" aria-live="polite" aria-relevant="additions text">
    {messages.map((message,index)=><div className={`bubble ${message.from}`} key={`${userId}-${index}`}>{renderText(message.text)}</div>)}
@@ -45,7 +45,7 @@ export default function AICTEAssistant(props:Props){
    {messages.length===1&&<div className="suggestions" aria-label="Suggested questions">{suggestions.map(question=><button type="button" key={question} disabled={busy} onClick={()=>send(question)}>{question}</button>)}</div>}
    <div ref={endRef}/>
   </div>
-  <form className="chat-input" onSubmit={event=>{event.preventDefault();send()}}><input ref={inputRef} aria-label="Ask the AICTE Assistant" placeholder="Ask about cases or portal features…" value={input} onChange={event=>setInput(event.target.value)} disabled={busy}/><button type="submit" aria-label="Send message" disabled={busy||!input.trim()}><Send size={16}/></button></form>
+  <form className="chat-input" onSubmit={event=>{event.preventDefault();send()}}><input ref={inputRef} aria-label="Ask the SYNAPSE Assistant" placeholder="Ask about cases or portal features…" value={input} onChange={event=>setInput(event.target.value)} disabled={busy}/><button type="submit" aria-label="Send message" disabled={busy||!input.trim()}><Send size={16}/></button></form>
   <div className="assistant-status"><MessageSquare size={12}/><span>Answers are deterministic; live data may be as current as the portal’s last refresh.</span></div>
  </div>
 }

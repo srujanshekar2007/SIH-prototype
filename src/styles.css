@@ -443,3 +443,71 @@ html,body,#root{width:100%;max-width:100%;overflow-x:clip}
   .notice{padding:10px;gap:8px}
   .button{min-height:40px}
 }
+
+/* The public entry screen that precedes the unchanged AuthGate. */
+.launch-screen{position:relative;isolation:isolate;display:flex;min-height:100vh;min-height:100svh;flex-direction:column;overflow:hidden;padding:32px clamp(20px,6vw,88px) 22px;background:radial-gradient(ellipse at 78% 75%,rgb(15 139 141 / 11%),transparent 38%),linear-gradient(120deg,#f8fafc 0%,#fff 58%,#f4f8f8 100%);color:#172b4d}
+.launch-screen:after{position:absolute;z-index:-1;right:-140px;bottom:-260px;width:min(58vw,660px);aspect-ratio:1;border:1px solid rgb(15 118 110 / 14%);border-radius:50%;box-shadow:0 0 0 48px rgb(15 118 110 / 3%),0 0 0 104px rgb(15 118 110 / 2%);content:"";pointer-events:none}
+.launch-brand{display:flex;align-items:center;gap:11px;color:#142b4a}
+.launch-brand .brand-mark{display:grid;flex:none;place-items:center;width:38px;height:38px;border-radius:11px;background:#0f8b8d;color:#fff;font:800 17px Manrope,sans-serif;box-shadow:0 5px 14px rgb(15 139 141 / 18%)}
+.launch-brand>span:last-child{display:grid;gap:3px}.launch-brand b{font:800 14px Manrope,sans-serif;letter-spacing:.07em}.launch-brand small{color:#8190a0;font-size:9px;font-weight:700;letter-spacing:.14em}
+.launch-content{width:min(620px,100%);margin:auto 0;padding:70px 0 85px}
+.launch-eyebrow{color:#0f777a;font-size:10px;font-weight:750;letter-spacing:.16em}
+.launch-content h1{margin:18px 0 15px;color:#142b4a;font:760 clamp(38px,6vw,68px)/1.08 "Geist",ui-sans-serif,system-ui,sans-serif;letter-spacing:-.055em}
+.launch-content>p{max-width:470px;margin:0;color:#64748b;font-size:16px;line-height:1.75}
+.launch-start{min-height:48px;margin-top:28px;padding:0 20px;border-radius:10px;font-size:13px;box-shadow:0 8px 20px rgb(15 118 110 / 18%)}
+.launch-security{display:flex;align-items:center;gap:7px;margin-top:25px;color:#718096;font-size:11px}.launch-security svg{color:#0f8b8d}
+.launch-footer{color:#8a98a8;font-size:10px}.launch-footer span{margin:0 6px}
+@media(max-width:600px){.launch-screen{padding:calc(20px + env(safe-area-inset-top,0px)) 22px calc(18px + env(safe-area-inset-bottom,0px))}.launch-content{padding:56px 0 68px}.launch-content h1{font-size:clamp(38px,11vw,54px)}.launch-content>p{font-size:14px}.launch-screen:after{right:-170px;bottom:-175px;width:390px}}
+
+/* Mobile/tablet drawer: align beneath the fixed header and scroll independently. */
+@media(max-width:900px){
+  .sidebar{inset:calc(10px + 56px + 10px + env(safe-area-inset-top,0px)) 0 0 0;width:min(286px,100vw);max-height:calc(100dvh - 76px - env(safe-area-inset-top,0px));border-radius:0 18px 0 0;z-index:45;overflow:hidden;touch-action:pan-y}
+  .sidebar.open{transform:translateX(0)}
+  .side-scroll{min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y}
+  .scrim{z-index:39;touch-action:pan-y}
+  .mobile-close{position:relative;z-index:2}
+}
+@media(max-width:760px){
+  .sidebar{width:min(286px,100vw)}
+}
+
+/* Complaint Registry filters only: stack labels above controls on narrow screens. */
+@media(max-width:760px){
+  .registry-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;width:100%;max-width:100%;min-width:0;}
+  .registry-filters label{display:grid;grid-template-columns:minmax(0,1fr);align-content:start;gap:5px;width:100%;min-width:0;}
+  .registry-filters input,.registry-filters select{display:block;width:100%;min-width:0;max-width:100%;min-height:42px;padding:8px;font-size:14px;}
+}
+@media(max-width:360px){
+  .registry-filters{grid-template-columns:minmax(0,1fr);}
+}
+
+@media(max-width:760px){
+  .notification-mobile-page{position:fixed;inset:0;z-index:1000;display:flex;flex-direction:column;min-width:0;min-height:100dvh;overflow:hidden;background:var(--background);color:var(--foreground);}
+  .notification-mobile-header{display:grid;gap:12px;flex:none;padding:calc(10px + env(safe-area-inset-top,0px)) 16px 14px;border-bottom:1px solid var(--border);background:var(--popover);}
+  .notification-back{display:inline-flex;align-items:center;align-self:start;gap:7px;min-height:42px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:var(--accent-teal);font-size:14px;font-weight:650;}
+  .notification-back:active{background:var(--secondary)}
+  .notification-mobile-header h1{margin:0;color:var(--foreground);font:700 21px/1.25 "Geist",ui-sans-serif,system-ui,sans-serif;}
+  .notification-mobile-header p{margin:4px 0 0;color:var(--muted-foreground);font-size:12px;}
+  .notification-mobile-page .notification-filters{flex:none;gap:4px;padding:9px 10px;}
+  .notification-mobile-page .notification-filters button{flex:1;justify-content:center;min-height:40px;gap:5px;padding:6px 5px;font-size:11px;}
+  .notification-mobile-list{flex:1;min-height:0;overflow-x:hidden;overflow-y:auto;padding:8px 12px calc(16px + env(safe-area-inset-bottom,0px));overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;}
+  .notification-mobile-list .notification-item{gap:7px 9px;padding:14px 10px;}
+  .notification-mobile-list .notification-item strong{font-size:13px;}
+  .notification-mobile-list .notification-institution,.notification-mobile-list .notification-details,.notification-mobile-list .notification-deadline{font-size:12px;}
+}
+
+/* Only the long case, institution, and workflow dialogs use a fixed title bar. */
+.modal.modal-fixed-header{display:flex;flex-direction:column;overflow:hidden}
+.modal-fixed-header>header{flex:none}
+.modal-fixed-header>.modal-content{flex:1 1 auto;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+
+.mobile-profile-trigger,.mobile-profile-menu{display:none}
+@media(max-width:760px){
+  .user-menu{position:relative;z-index:80}
+  .user-menu .desktop-profile-avatar,.user-menu .desktop-logout-button{display:none}
+  .user-menu .mobile-profile-trigger{display:grid;flex:none;padding:0;border:0;cursor:pointer}
+  .mobile-profile-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:100;display:grid;width:max-content;min-width:140px;max-width:calc(100vw - 24px);gap:2px;padding:6px;border:1px solid var(--border);border-radius:12px;background:var(--popover);color:var(--popover-foreground);box-shadow:0 12px 30px rgb(16 29 45 / 18%)}
+  .mobile-profile-menu button{display:flex;align-items:center;width:100%;min-height:40px;padding:0 11px;border:0;border-radius:8px;background:transparent;color:inherit;text-align:left;font-size:13px;font-weight:600}
+  .mobile-profile-menu button:hover,.mobile-profile-menu button:focus-visible{background:var(--secondary)}
+}
+.brand-logo-image{display:block;width:100%;height:100%;object-fit:contain}

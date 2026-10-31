@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { AlertTriangle, Eye, EyeOff, Info, ShieldCheck } from 'lucide-react';
 import { publicRegistrationError, registerPublicAccount, validateRegistration } from '../lib/auth';
 import { supabase } from '../lib/supabase';
+import BrandLogo from './BrandLogo';
 
 type Mode = 'login' | 'signup' | 'forgot' | 'verify';
 
@@ -77,7 +78,7 @@ export default function AuthGate({ configured }: { configured: boolean }) {
 
   const heading = mode === 'signup' ? 'Create your account' : mode === 'forgot' ? 'Reset your password' : mode === 'verify' ? 'Check your email' : 'Welcome back';
 
-  return <div className={`login-screen ${mode === 'signup' ? 'signup-mode' : ''}`}><div className="login-art"><div className="login-brand"><div className="brand-mark">A</div><b>AICTE</b></div><div className="login-art-copy"><span>INSTITUTIONAL GRIEVANCE MONITORING</span><h1>Clear visibility.<br/>Coordinated action.</h1><p>A secure workspace for authorized officials to monitor institution-related complaint cases.</p></div><div className="login-art-bottom">Integrated Complaint Monitoring System <span>·</span> Prototype</div></div><main className="login-main"><form key={mode} className="login-card" autoComplete="off" onSubmit={submit}>
+  return <div className={`login-screen ${mode === 'signup' ? 'signup-mode' : ''}`}><div className="login-art"><div className="login-brand"><BrandLogo /><b>SYNAPSE</b></div><div className="login-art-copy"><span>INSTITUTIONAL GRIEVANCE MONITORING</span><h1>Clear visibility.<br/>Coordinated action.</h1><p>A secure workspace for authorized officials to monitor institution-related complaint cases.</p></div><div className="login-art-bottom">Integrated Complaint Monitoring System <span>·</span> Prototype</div></div><main className="login-main"><form key={mode} className="login-card" autoComplete="off" onSubmit={submit}>
     <div className="eyebrow">{mode === 'signup' ? 'PUBLIC ACCOUNT REGISTRATION' : mode === 'forgot' ? 'ACCOUNT RECOVERY' : mode === 'verify' ? 'EMAIL VERIFICATION' : 'SECURE PORTAL ACCESS'}</div>
     <h2>{heading}</h2>
     <p>{mode === 'signup' ? 'Create an account to explore the demonstration portal.' : mode === 'forgot' ? 'Request a secure password-reset link from Supabase Auth.' : mode === 'verify' ? 'Complete email verification if it is enabled for this Supabase project.' : 'Sign in to continue to the workspace allowed by your account role.'}</p>
@@ -93,5 +94,5 @@ export default function AuthGate({ configured }: { configured: boolean }) {
     {mode === 'verify' ? <button type="button" className="button primary full" disabled={busy||!configured} onClick={()=>void resendVerification()}>{busy?'Sending…':'Resend verification email'}</button> : <button className="button primary full" disabled={busy||!configured}>{busy?mode==='signup'?'Creating account…':mode==='forgot'?'Requesting link…':'Signing in…':mode==='signup'?'Create account':mode==='forgot'?'Send reset link':'Sign in securely'}</button>}
     <div className="auth-switches">{mode === 'login' && <><button type="button" className="password-reset-link" onClick={()=>switchMode('forgot')}>Forgot your password?</button><span>New to the portal? <button type="button" className="text-button" onClick={()=>switchMode('signup')}>Create account</button></span></>}{mode === 'signup' && <span>Already registered? <button type="button" className="text-button" onClick={()=>switchMode('login')}>Return to login</button></span>}{(mode === 'forgot'||mode==='verify') && <button type="button" className="text-button" onClick={()=>switchMode('login')}>Return to login</button>}</div>
     <small className="login-note"><ShieldCheck size={14}/>{mode === 'signup'?'Demo access is temporary and applies only in the demonstration environment.':'Your access is controlled by your existing Supabase profile and database policies.'}</small>
-  </form><div className="login-foot">Administrative monitoring prototype · Not an official AICTE deployment</div></main></div>;
+  </form><div className="login-foot">SYNAPSE · Administrative monitoring prototype · Not an official AICTE deployment</div></main></div>;
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Bell, RefreshCw } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import type { CaseRow } from '../lib/supabase';
 import { getDeadlineNotifications, type DeadlineNotification } from '../lib/notifications';
 
@@ -15,6 +16,7 @@ type Filter = 'All' | 'Overdue' | 'Due Soon';
 
 export default function NotificationBell({ cases, loading, error, onRetry, onOpenCase }: NotificationBellProps) {
   const [open, setOpen] = useState(false);
+  const [mobilePage, setMobilePage] = useState(false);
   const [filter, setFilter] = useState<Filter>('All');
   const [now, setNow] = useState(() => new Date());
   const rootRef = useRef<HTMLDivElement>(null);
@@ -30,20 +32,55 @@ export default function NotificationBell({ cases, loading, error, onRetry, onOpe
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    const mobileBreakpoint = window.matchMedia('(max-width: 760px)');
+    const closeMobilePageOnDesktop = () => {
+      if (!mobileBreakpoint.matches) setMobilePage(false);
+    };
+    mobileBreakpoint.addEventListener('change', closeMobilePageOnDesktop);
+    return () => mobileBreakpoint.removeEventListener('change', closeMobilePageOnDesktop);
+  }, []);
+
+  useEffect(() => {
+    if (!open && !mobilePage) return;
     const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setOpen(false);
+      if (open && event.target instanceof Node && !rootRef.current?.contains(event.target)) setOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') { setOpen(false); setMobilePage(false); }
     };
-    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    if (open) document.addEventListener('pointerdown', closeOnOutsidePointer);
     window.addEventListener('keydown', closeOnEscape);
     return () => {
       document.removeEventListener('pointerdown', closeOnOutsidePointer);
       window.removeEventListener('keydown', closeOnEscape);
     };
-  }, [open]);
+  }, [open, mobilePage]);
+
+  useEffect(() => {
+    if (!mobilePage) return;
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const root = document.documentElement;
+    const previousBody = { position: body.style.position, top: body.style.top, left: body.style.left, right: body.style.right, width: body.style.width, overflow: body.style.overflow };
+    const previousRootOverflow = root.style.overflow;
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+    root.style.overflow = 'hidden';
+    return () => {
+      body.style.position = previousBody.position;
+      body.style.top = previousBody.top;
+      body.style.left = previousBody.left;
+      body.style.right = previousBody.right;
+      body.style.width = previousBody.width;
+      body.style.overflow = previousBody.overflow;
+      root.style.overflow = previousRootOverflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, [mobilePage]);
 
   const counts = {
     All: notifications.length,
@@ -53,7 +90,17 @@ export default function NotificationBell({ cases, loading, error, onRetry, onOpe
 
   const openNotification = (item: DeadlineNotification) => {
     setOpen(false);
+    setMobilePage(false);
     onOpenCase(item.case.case_number);
+  };
+
+  const handleTriggerClick = () => {
+    if (window.matchMedia('(max-width: 760px)').matches) {
+      setOpen(false);
+      setMobilePage(true);
+      return;
+    }
+    setOpen((value) => !value);
   };
 
   return <div className="notification-bell" ref={rootRef}>
@@ -62,9 +109,9 @@ export default function NotificationBell({ cases, loading, error, onRetry, onOpe
       className="icon-btn notification-bell-trigger"
       aria-label={`Case notifications, ${notifications.length} cases require attention`}
       aria-haspopup="dialog"
-      aria-expanded={open}
-      aria-controls="case-notifications-panel"
-      onClick={() => setOpen((value) => !value)}
+      aria-expanded={open || mobilePage}
+      aria-controls={mobilePage ? 'case-notifications-mobile-page' : 'case-notifications-panel'}
+      onClick={handleTriggerClick}
     >
       <Bell size={17}/>
       {notifications.length > 0 && <span className="notification-count" aria-hidden="true">{notifications.length}</span>}
@@ -94,6 +141,31 @@ export default function NotificationBell({ cases, loading, error, onRetry, onOpe
               : <div className="notification-state">{notifications.length === 0 ? 'No cases require immediate attention.' : `No ${filter.toLowerCase()} cases.`}</div>}
       </div>
     </section>}
+    {mobilePage && createPortal(
+      <section className="notification-mobile-page" id="case-notifications-mobile-page" aria-label="Case Notifications">
+        <header className="notification-mobile-header">
+          <button type="button" className="notification-back" onClick={() => setMobilePage(false)}><ArrowLeft size={19} aria-hidden="true"/> Back</button>
+          <div><h1>Case Notifications</h1><p>{notifications.length} case{notifications.length === 1 ? '' : 's'} require attention</p></div>
+        </header>
+        <div className="notification-filters" role="tablist" aria-label="Filter notifications">
+          {(['All', 'Overdue', 'Due Soon'] as const).map((item) => <button
+            type="button"
+            key={item}
+            role="tab"
+            aria-selected={filter === item}
+            className={filter === item ? 'is-selected' : ''}
+            onClick={() => setFilter(item)}
+          >{item}<span>{counts[item]}</span></button>)}
+        </div>
+        <div className="notification-list notification-mobile-list" aria-live="polite">
+          {loading ? <div className="notification-state"><span className="spinner small"/>Loading case deadlines…</div>
+            : error ? <div className="notification-state notification-error" role="alert"><p>{error}</p><button type="button" className="button secondary" disabled={loading} onClick={onRetry}><RefreshCw size={14}/> Retry</button></div>
+              : visibleNotifications.length ? visibleNotifications.map((item) => <NotificationRow key={item.case.id} item={item} now={now} onClick={() => openNotification(item)}/>)
+                : <div className="notification-state">{notifications.length === 0 ? 'No cases require immediate attention.' : `No ${filter.toLowerCase()} cases.`}</div>}
+        </div>
+      </section>,
+      document.body,
+    )}
   </div>;
 }
 
