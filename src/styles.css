@@ -511,3 +511,5 @@ html,body,#root{width:100%;max-width:100%;overflow-x:clip}
   .mobile-profile-menu button:hover,.mobile-profile-menu button:focus-visible{background:var(--secondary)}
 }
 .brand-logo-image{display:block;width:100%;height:100%;object-fit:contain}
+/* Keep browser-native controls and the document palette independent of OS/browser dark preferences. */
+:root,html,body,input,select,textarea,button{color-scheme:light}
