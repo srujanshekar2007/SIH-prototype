@@ -383,6 +383,9 @@ html,body,#root{width:100%;max-width:100%;overflow-x:clip}
 }
 
 @media (max-width:600px){
+  /* Prevent iOS Safari from zooming the page when a form field receives focus. */
+  input:not([type=checkbox]):not([type=radio]),select,textarea{font-size:16px!important}
+  input:not([type=checkbox]):not([type=radio]),select,textarea{max-width:100%}
   .page-heading{align-items:stretch;flex-direction:column;gap:12px}
   .page-heading>.button,.page-heading>.button-group{width:100%}
   .page-heading>.button-group{display:flex;flex-wrap:wrap}
@@ -418,7 +421,10 @@ html,body,#root{width:100%;max-width:100%;overflow-x:clip}
   .login-main{padding-left:16px;padding-right:16px}
   .login-card{width:100%;max-width:440px;padding:20px}
   .public-account-card{width:calc(100vw - 22px);padding:17px}
-  .notification-panel{right:-44px;width:calc(100vw - 18px)}
+}
+
+@media (max-width:760px){
+  .notification-panel{position:fixed;top:74px;right:12px;left:auto;width:min(410px,calc(100vw - 24px));max-width:410px;max-height:calc(100dvh - 86px)}
 }
 
 @media (max-width:360px){
